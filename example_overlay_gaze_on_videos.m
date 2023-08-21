@@ -114,11 +114,24 @@ Screen( 'FillOval', win.WindowHandle, [255, 0, 0], make_rect(x, y, s, psf) );
 
 % Draw history of gaze positions
 pt = context.Value.position_trail.Value.history;
-for i = 1:size(pt, 1)
-  prev_p = pt(i, :);
+verts = [[-0.5, -0.5]; [0.5, -0.5]; [0.5, 0.5]; [-0.5, 0.5]];
+
+for i = 1:size(pt, 1)-1
+  p0 = pt(i, :);
+  p1 = pt(i+1, :);
+  
+  v = p1(1:2) - p0(1:2);
+  vl = norm( v );
+  v = v ./ vl;
+  theta = atan2( v(2), v(1) );
+  m = rotation_2d( theta );
+  vs = (m * (verts .* [ 5, vl ])')' + p0 + v * vl * 0.5;  
   frac_p = (i - 1) / max( 1, size(pt, 1) - 1 );
-  Screen( 'FillOval', win.WindowHandle, [255 * frac_p, 0, 0] ...
-    , make_rect(prev_p(1), prev_p(2), s, prev_p(3)) );
+  
+  Screen( 'FillPoly', win.WindowHandle, [255 * frac_p, 0, 0], vs );
+  
+%   Screen( 'FillOval', win.WindowHandle, [255 * frac_p, 0, 0] ...
+%     , make_rect(prev_p(1), prev_p(2), s, prev_p(3)) );
 end
 
 trail_len = 10;
@@ -128,6 +141,21 @@ function r = make_rect(x, y, s, psf)
   adj_s = s * 0.5;
   s = s + adj_s * (psf * 2 - 1);
   r = [ x - s, y - s, x + s, y + s ];    
+end
+
+end
+
+function m = rotation_2d(theta, m3)
+
+assert( numel(theta) == 1 );
+
+m = [ cos(theta), -sin(theta)
+      sin(theta), cos(theta) ];
+    
+if ( nargin > 1 && m3 )
+  m3 = eye( 3 );
+  m3(1:2, 1:2) = m;
+  m = m3;
 end
 
 end
