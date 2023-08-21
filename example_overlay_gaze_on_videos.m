@@ -22,12 +22,18 @@ win = ptb.Window( [0, 0, 1600, 900] );
 win.SkipSyncTests = true;
 open( win );
 
+try
+
 for i = begin:begin+min(max_num_clips, size(clip_table, 1))-1
   curr_clip = clip_table(i, :);
   vid_file_p = char( fullfile(vid_p, curr_clip.video_filename) );
   
   draw_cb = @(t) overlay_gaze( win, context, e, sync_info, i, t, pupil_threshs );
   play_movie( win, vid_file_p, curr_clip.start, curr_clip.stop, [], draw_cb );
+end
+
+catch err
+  warning( err.message );
 end
 
 close( win );
@@ -118,18 +124,18 @@ pt = context.Value.position_trail.Value.history;
 for i = 1:size(pt, 1)-1
   frac_p = (i - 1) / max( 1, size(pt, 1) - 1 );
   
-  p0 = pt(i, :);
-  p1 = pt(i+1, :);
+  p0 = pt(i, 1:2);
+  p1 = pt(i+1, 1:2);
   
-  step = 5;
-  v = p1(1:2) - p0(1:2);
+  step = 1;
+  v = p1 - p0;
   vl = norm( v );
   
   accum = 0;
   while ( accum < vl )
     cp = p0 + v * accum;
-    Screen( 'FillOval', win.WindowHandle, [255 * frac_p, 0, 0] ...
-      , make_sized_rect(cp(1), cp(2), s, step) );
+    Screen( 'FillOval', win.WindowHandle, [255, 0, 0] ...
+      , make_sized_rect(cp(1), cp(2), 5) );
     accum = accum + step;
   end 
 end
