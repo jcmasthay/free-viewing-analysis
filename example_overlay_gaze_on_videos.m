@@ -120,27 +120,27 @@ Screen( 'FillOval', win.WindowHandle, [255, 0, 0], make_rect(x, y, s, psf) );
 
 % Draw history of gaze positions
 pt = context.Value.position_trail.Value.history;
+verts = [[-0.5, -0.5]; [0.5, -0.5]; [0.5, 0.5]; [-0.5, 0.5]];
+trail_w = 10;
 
 for i = 1:size(pt, 1)-1
-  frac_p = (i - 1) / max( 1, size(pt, 1) - 1 );
+  frac_p = (i - 1) / max(1, size(pt, 1)-1);
   
   p0 = pt(i, 1:2);
   p1 = pt(i+1, 1:2);
   
-  step = 1;
   v = p1 - p0;
   vl = norm( v );
+  v = v ./ vl;
   
-  accum = 0;
-  while ( accum < vl )
-    cp = p0 + v * accum;
-    Screen( 'FillOval', win.WindowHandle, [255, 0, 0] ...
-      , make_sized_rect(cp(1), cp(2), 5) );
-    accum = accum + step;
-  end 
+  X = [-v(2); v(1)];
+  Y = v(:);
+  m = [ X, Y ];
+  vs = (m * (verts .* [trail_w, vl])')' + p0 + Y' * vl * 0.5;  
+  Screen( 'FillPoly', win.WindowHandle, [255 * frac_p, 0, 0], vs );
 end
 
-trail_len = 10;
+trail_len = 15;
 update_trail( context.Value.position_trail, [x, y, psf], trail_len );
 
 function r = make_rect(x, y, s, psf)
