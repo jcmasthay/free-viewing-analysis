@@ -106,7 +106,7 @@ x = (1 - f0) * x0 + f0 * x1;
 y = (1 - f0) * y0 + f0 * y1;
 ps = (1 - f0) * ps0 + ps1 * y1;
 
-ps = max( min(ps, pupil_threshs(2)), pupil_thresh(1) );
+ps = max( min(ps, pupil_threshs(2)), pupil_threshs(1) );
 psf = (ps - pupil_threshs(1)) ./ (pupil_threshs(2) - pupil_threshs(1));
 s = 25;
 
