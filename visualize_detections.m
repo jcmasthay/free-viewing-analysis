@@ -8,7 +8,7 @@ mats = shared_utils.io.findmat( bbox_p );
 mat_names = shared_utils.io.filenames( mats );
 frame_nums = cellfun( @(x) str2double(x(numel('bbox_')+1:end)), mat_names );
 
-desired_frame = 402;
+desired_frame = 800;
 
 desired_ind = frame_nums == desired_frame;
 bbox_file = load( mats{desired_ind} );
