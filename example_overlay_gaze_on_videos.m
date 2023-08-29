@@ -1,4 +1,4 @@
-data_p = fullfile( fv_data_directory(), '08102023' );
+data_p = fullfile( fv_data_directory(), '08142023' );
 
 mats = shared_utils.io.findmat( data_p );
 f = load( mats{1} );
