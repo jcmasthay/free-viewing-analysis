@@ -1,4 +1,5 @@
-data_p = fullfile( fv_data_directory(), '08102023' );
+data_p = fullfile( fv_data_directory(), '08142023' );
+bbox_p = 'D:\data\changlab\jamie\free-viewing\avi files\Monkey Thieves S2E6.avi-bbox';
 
 mats = shared_utils.io.findmat( data_p );
 f = load( mats{1} );
@@ -13,8 +14,9 @@ pupil_threshs = pupil_limits( e.Samples.pupilSize );
 
 position_trail = ptb.Reference( struct('history', []) );
 context = ptb.Reference( struct('position_trail', position_trail) );
+context.Value.bbox_p = bbox_p;
 
-begin = 1;
+begin = 13;
 max_num_clips = 20;
 vid_p = fullfile( project_directory, 'videos' );
 
@@ -26,7 +28,13 @@ try
 
 for i = begin:begin+min(max_num_clips, size(clip_table, 1))-1
   curr_clip = clip_table(i, :);
-  vid_file_p = char( fullfile(vid_p, curr_clip.video_filename) );
+  
+  vid_fname = char( curr_clip.video_filename );
+%   vid_fname = sprintf( '%s-full-detect.mp4', vid_fname );
+%   vid_fna
+  vid_file_p = char( fullfile(vid_p, vid_fname) );
+  vid_reader = VideoReader( vid_file_p );
+  context.Value.video_reader = vid_reader;
   
   draw_cb = @(t) overlay_gaze( win, context, e, sync_info, i, t, pupil_threshs );
   play_movie( win, vid_file_p, curr_clip.start, curr_clip.stop, [], draw_cb );
@@ -97,6 +105,24 @@ t0 = match_clip.video_time(i0);
 t1 = match_clip.video_time(i1);
 f0 = (vid_t - t0) / (t1 - t0);
 
+vid_reader = context.Value.video_reader;
+frame_index = floor( t0 * vid_reader.FrameRate );
+im_dims = [ vid_reader.Width, vid_reader.Height ];
+
+bbox_p = context.Value.bbox_p;
+bbox_p = fullfile( bbox_p, sprintf('bbox_%d.mat', frame_index) );
+
+if ( exist(bbox_p, 'file') )
+  accept_detect = @(x) x.conf >= 0.1;
+  bboxes = load( bbox_p );
+  detections = bboxes.detections(cellfun(accept_detect, bboxes.detections));
+  
+  for i = 1:numel(detections)
+    bbox = bbox_to_pixel_rect( detections{i}.bbox, im_dims, [win.Width, win.Height] );
+    Screen( 'FrameRect', win.WindowHandle, [255, 255, 0], bbox );
+  end
+end
+
 edf_t0_ind = edf.Samples.time == match_clip.edf_time(i0);
 edf_t1_ind = edf.Samples.time == match_clip.edf_time(i1);
 
@@ -152,5 +178,18 @@ end
 function r = make_sized_rect(x, y, s)
   r = [ x - s, y - s, x + s, y + s ];
 end
+
+end
+
+function r = bbox_to_pixel_rect(bbox, im_dims, screen_dims)
+
+p0 = bbox(1:2) .* im_dims;
+wh = bbox(3:4) .* im_dims;
+
+adj_x = (screen_dims(1) - im_dims(1)) * 0.5;
+adj_y = (screen_dims(2) - im_dims(2)) * 0.5;
+
+p0 = p0 + [ adj_x, adj_y ];
+r = [ p0(1), p0(2), p0(1) + wh(1), p0(2) + wh(2) ];
 
 end
