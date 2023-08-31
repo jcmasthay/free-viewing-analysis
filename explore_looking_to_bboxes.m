@@ -14,18 +14,21 @@ sync_info = extract_edf_sync_info( edf_file.Events.Messages, task_file.edf_sync_
 
 %%
 
-look_props = compute_roi_looking_proportions( task_file, edf_file, sync_info, vid_p, bbox_p );
+look_prop_ct = compute_roi_looking_proportions( ...
+  task_file, edf_file, sync_info, vid_p, bbox_p );
 
 %%
 
 figure(1);
 clf;
-hist( look_props, 10 );
-title( 'Duration of looking to animals' );
+hist( look_prop_ct.look_props, 10 );
+median( look_prop_ct.look_props )
+xlim( [0, 1] );
+title( 'Proportion of looking to animals' );
 
 %%
 
-function look_props = compute_roi_looking_proportions(task_file, edf_file, sync_info, vid_p, bbox_p)
+function clip_table = compute_roi_looking_proportions(task_file, edf_file, sync_info, vid_p, bbox_p)
 
 clip_table = task_file.clip_table;
 
@@ -35,7 +38,10 @@ screen_dims = [ task_file.window.Width, task_file.window.Height ];
 store_detects = containers.Map();
 
 look_props = nan( height(clip_table), 1 );
+
 for i = 1:height(clip_table)  
+  %%
+  
   fprintf( '\n %d of %d', i, height(clip_table) );
   
   vid_name = clip_table.video_filename{i};
@@ -57,6 +63,8 @@ for i = 1:height(clip_table)
   
   look_dur = 0;
   roi_dur = 0;
+  
+  %%
   
   for ti = edf_t0_ind:edf_t1_ind
     curr_edf_t = edf_file.Samples.time(ti);
@@ -93,8 +101,14 @@ for i = 1:height(clip_table)
     roi_dur = roi_dur + double( ~isempty(detections) );
   end
   
-  look_props(i) = look_dur / roi_dur;
+  %%
+  
+  if ( roi_dur ~= 0 )
+    look_props(i) = look_dur / roi_dur;
+  end
 end
+
+clip_table.look_props = look_props(:);
 
 end
 
