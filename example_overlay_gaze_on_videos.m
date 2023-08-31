@@ -1,7 +1,9 @@
-data_p = fullfile( fv_data_directory(), '08102023' );
+data_p = fullfile( fv_data_directory(), '08232023' );
+
+block_index = 5;
 
 mats = shared_utils.io.findmat( data_p );
-f = load( mats{1} );
+f = load( mats{block_index} );
 e = Edf2Mat( fullfile(data_p, f.file.edf_file_name) );
 f = f.(char(fieldnames(f)));
 
@@ -15,8 +17,10 @@ position_trail = ptb.Reference( struct('history', []) );
 context = ptb.Reference( struct('position_trail', position_trail) );
 
 begin = 1;
-max_num_clips = 20;
+%max_num_clips = 20;
+max_num_clips = size( clip_table, 1 );  % all clips
 vid_p = fullfile( project_directory, 'videos' );
+scram_vid_p = fullfile( vid_p, 'scrambled' );
 
 win = ptb.Window( [0, 0, 1600, 900] );
 win.SkipSyncTests = true;
@@ -26,7 +30,11 @@ try
 
 for i = begin:begin+min(max_num_clips, size(clip_table, 1))-1
   curr_clip = clip_table(i, :);
-  vid_file_p = char( fullfile(vid_p, curr_clip.video_filename) );
+  if ( strcmp(curr_clip.block_type, 'C') )
+    vid_file_p = char( fullfile(scram_vid_p, curr_clip.video_filename) );
+  else
+    vid_file_p = char( fullfile(vid_p, curr_clip.video_filename) );
+  end
   
   draw_cb = @(t) overlay_gaze( win, context, e, sync_info, i, t, pupil_threshs );
   play_movie( win, vid_file_p, curr_clip.start, curr_clip.stop, [], draw_cb );
