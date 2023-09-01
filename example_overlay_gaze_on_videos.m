@@ -1,6 +1,7 @@
-data_p = fullfile( fv_data_directory(), '08232023' );
+block_index = 2;
 
-block_index = 5;
+data_p = 'C:\source\data\free_viewing\08222023';
+bbox_p = 'C:\source\data\bounding_boxes';
 
 mats = shared_utils.io.findmat( data_p );
 f = load( mats{block_index} );
@@ -17,8 +18,9 @@ position_trail = ptb.Reference( struct('history', []) );
 context = ptb.Reference( struct('position_trail', position_trail) );
 
 begin = 1;
-%max_num_clips = 20;
-max_num_clips = size( clip_table, 1 );  % all clips
+max_num_clips = 20;
+conf_threshold = 0.6;
+
 vid_p = fullfile( project_directory, 'videos' );
 scram_vid_p = fullfile( vid_p, 'scrambled' );
 
@@ -30,12 +32,18 @@ try
 
 for i = begin:begin+min(max_num_clips, size(clip_table, 1))-1
   curr_clip = clip_table(i, :);
+
   if ( strcmp(curr_clip.block_type, 'C') )
     vid_file_p = char( fullfile(scram_vid_p, curr_clip.video_filename) );
   else
     vid_file_p = char( fullfile(vid_p, curr_clip.video_filename) );
   end
-  
+
+  vid_reader = VideoReader( vid_file_p );
+  context.Value.video_reader = vid_reader;
+  context.Value.bbox_p = fullfile( bbox_p, sprintf('%s-bbox', char(curr_clip.video_filename)) );
+  context.Value.confidence_threshold = conf_threshold;
+
   draw_cb = @(t) overlay_gaze( win, context, e, sync_info, i, t, pupil_threshs );
   play_movie( win, vid_file_p, curr_clip.start, curr_clip.stop, [], draw_cb );
 end
@@ -105,6 +113,24 @@ t0 = match_clip.video_time(i0);
 t1 = match_clip.video_time(i1);
 f0 = (vid_t - t0) / (t1 - t0);
 
+vid_reader = context.Value.video_reader;
+frame_index = floor( t0 * vid_reader.FrameRate );
+im_dims = [ vid_reader.Width, vid_reader.Height ];
+
+bbox_p = context.Value.bbox_p;
+bbox_p = fullfile( bbox_p, sprintf('bbox_%d.mat', frame_index) );
+
+if ( exist(bbox_p, 'file') )
+  accept_detect = @(x) x.conf >= context.Value.confidence_threshold;
+  bboxes = load( bbox_p );
+  detections = bboxes.detections(cellfun(accept_detect, bboxes.detections));
+  
+  for i = 1:numel(detections)
+    bbox = bbox_to_pixel_rect( detections{i}.bbox, im_dims, [win.Width, win.Height] );
+    Screen( 'FrameRect', win.WindowHandle, [255, 255, 0], bbox, 4 );
+  end
+end
+
 edf_t0_ind = edf.Samples.time == match_clip.edf_time(i0);
 edf_t1_ind = edf.Samples.time == match_clip.edf_time(i1);
 
@@ -160,5 +186,18 @@ end
 function r = make_sized_rect(x, y, s)
   r = [ x - s, y - s, x + s, y + s ];
 end
+
+end
+
+function r = bbox_to_pixel_rect(bbox, im_dims, screen_dims)
+
+p0 = bbox(1:2) .* im_dims;
+wh = bbox(3:4) .* im_dims;
+
+adj_x = (screen_dims(1) - im_dims(1)) * 0.5;
+adj_y = (screen_dims(2) - im_dims(2)) * 0.5;
+
+p0 = p0 + [ adj_x, adj_y ];
+r = [ p0(1), p0(2), p0(1) + wh(1), p0(2) + wh(2) ];
 
 end
