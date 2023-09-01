@@ -23,14 +23,15 @@ parfor i = 1:numel(task_file_ps)
   
 fprintf( '\n %d of %d', i, numel(task_file_ps) );
 
-save_p = fullfile( preproc_p, sprintf('looking_proportions_%d.mat', i) );
-if ( exist(save_p, 'file') && ~allow_overwrite )
-  continue
-end
-
 task_file = shared_utils.io.fload( task_file_ps{i} );
 sesh_p = fileparts( task_file_ps{i} );
 edf_file = Edf2Mat( fullfile(sesh_p, task_file.edf_file_name) );
+fname = shared_utils.io.filenames( task_file_ps{i} );
+
+save_p = fullfile( preproc_p, sprintf('%s.mat', fname) );
+if ( exist(save_p, 'file') && ~allow_overwrite )
+  continue
+end
 
 sync_info = extract_edf_sync_info( ...
   edf_file.Events.Messages, task_file.edf_sync_times );

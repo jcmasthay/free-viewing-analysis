@@ -21,6 +21,7 @@ fprintf( '\n %d of %d', i, numel(task_file_ps) );
 task_file = shared_utils.io.fload( task_file_ps{i} );
 sesh_p = fileparts( task_file_ps{i} );
 edf_file = Edf2Mat( fullfile(sesh_p, task_file.edf_file_name) );
+fname = shared_utils.io.filenames( task_file_ps{i} );
 
 sync_info = extract_edf_sync_info( ...
   edf_file.Events.Messages, task_file.edf_sync_times );
@@ -34,11 +35,15 @@ clip_table.timestamp(:) = task_file.time0_timestamp;
 
 %%
 
-edf_info = compute_edf_sample_traces( edf_file, sync_info, clip_table, vid_p );
-clip_table.edf_info = edf_info;
-
-save_p = fullfile( preproc_p, sprintf('edf_samples_%d.mat', i) );
-do_save( save_p, clip_table );
+try
+  edf_info = compute_edf_sample_traces( edf_file, sync_info, clip_table, vid_p );
+  clip_table.edf_info = edf_info;
+  
+  save_p = fullfile( preproc_p, sprintf('%s.mat', fname) );
+  do_save( save_p, clip_table );
+catch err
+  warning( err.message );
+end
 
 end
 
