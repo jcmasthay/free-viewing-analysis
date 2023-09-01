@@ -1,5 +1,6 @@
 %%  load edf samples
 
+root_data_p = fv_data_directory;
 edf_sample_fs = shared_utils.io.findmat( fullfile(root_data_p, 'edf_samples') );
 edf_samples = table();
 for i = 1:numel(edf_sample_fs)
@@ -28,6 +29,40 @@ end
 
 shared_utils.plot.match_ylims( axs );
 
+%%  
+
+var_subset = edf_samples.position_variance(:, 1);
+
+edf_samples.session = string( datestr(edf_samples.timestamp, 'mmddyyyy') );
+[I, var_diff] = findeach( edf_samples, {'start', 'session', 'interactive_agency', 'affiliativeness'} );
+var_diff.var = nan( numel(I), 1 );
+
+for i = 1:numel(I)
+  a_block = intersect( find(edf_samples.block_type == 'A'), I{i} );
+  b_block = intersect( find(edf_samples.block_type == 'B'), I{i} );
+  
+  if ( numel(a_block) == 1 && numel(b_block) == 1 )
+    var_diff.var(i) = var_subset(a_block) - var_subset(b_block);
+  end
+end
+
+mask = var_diff.affiliativeness ~= 'neutral';
+
+[I, id, C] = rowsets( 3, var_diff ...
+  , {} ...
+  , {'interactive_agency'} ...
+  , {'affiliativeness'} ...
+  , 'mask', mask, 'to_string', true );
+C = strrep( C, '_', ' ');
+
+figure(1); clf;
+[axs, hs, xs] = plots.simplest_barsets( var_diff.var, I, id, C ...
+  , 'summary_func', @nanmean ...
+  , 'error_func', @plotlabeled.nansem ...
+);
+
+title( axs(1), 'Difference in variance in position for clips seen in vs. out of order' );
+
 %%  plot means of variance in position for clip types and block types
 
 mask = edf_samples.affiliativeness ~= 'neutral';
@@ -46,3 +81,6 @@ figure(1); clf;
   , 'summary_func', @nanmean ...
   , 'error_func', @plotlabeled.nansem ...
 );
+
+% title( 'Mean variance in position for clip and block types' );
+ylabel( axs(1), 'Variance' );
