@@ -1,4 +1,4 @@
-root_data_p = '/Volumes/external3/data/changlab/jamie/free-viewing';
+root_data_p = fv_data_directory();
 
 data_p = fullfile( root_data_p, 'data' );
 vid_p = fullfile( root_data_p, 'videos' );
