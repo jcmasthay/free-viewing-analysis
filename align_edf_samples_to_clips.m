@@ -2,7 +2,8 @@ root_data_p = '/Volumes/external3/data/changlab/jamie/free-viewing';
 
 data_p = fullfile( root_data_p, 'data' );
 vid_p = fullfile( root_data_p, 'videos' );
-bbox_p = fullfile( root_data_p, 'detections');
+preproc_p = fullfile( root_data_p, 'edf_samples' );
+shared_utils.io.require_dir( preproc_p );
 
 % sesh_dir = '08142023';
 sesh_dirs = arrayfun( @(x) sprintf('08%d2023', x), 14:31, 'un', 0 );
@@ -12,17 +13,14 @@ sesh_ps = fullfile( data_p, sesh_dirs );
 sesh_ps = sesh_ps(cellfun(@(x) exist(x, 'file'), sesh_ps) > 0);
 task_file_ps = find_task_data_files( sesh_ps );
 
-task_file_ps = task_file_ps(1:2);
-
-look_prop_cts = cell( numel(task_file_ps), 1 );
-
 parfor i = 1:numel(task_file_ps)
 %%
   
 fprintf( '\n %d of %d', i, numel(task_file_ps) );
 
 task_file = shared_utils.io.fload( task_file_ps{i} );
-edf_file = Edf2Mat( fullfile(data_p, sesh_dir, task_file.edf_file_name) );
+sesh_p = fileparts( task_file_ps{i} );
+edf_file = Edf2Mat( fullfile(sesh_p, task_file.edf_file_name) );
 
 sync_info = extract_edf_sync_info( ...
   edf_file.Events.Messages, task_file.edf_sync_times );
@@ -36,40 +34,25 @@ clip_table.timestamp(:) = task_file.time0_timestamp;
 
 %%
 
-look_prop_cts{i} = compute_roi_looking_proportions( ...
-  task_file, edf_file, sync_info, clip_table, vid_p, bbox_p );
+edf_info = compute_edf_sample_traces( edf_file, sync_info, clip_table, vid_p );
+clip_table.edf_info = edf_info;
+
+save_p = fullfile( preproc_p, sprintf('edf_samples_%d.mat', i) );
+do_save( save_p, clip_table );
 
 end
 
 %%
 
-look_prop_ct = vertcat( look_prop_cts{:} );
+function do_save(preproc_p, clip_table)
 
-%%
+save( preproc_p, 'clip_table' );
 
-[I, id, C] = rowsets( ...
-  1, look_prop_ct, {'affiliativeness', 'interactive_agency'} );
+end
 
-%%
+function edf_infos = compute_edf_sample_traces(edf_file, sync_info, clip_table, vid_p)
 
-figure(1);
-clf;
-hist( look_prop_ct.look_props, 10 );
-median( look_prop_ct.look_props )
-xlim( [0, 1] );
-title( 'Proportion of looking to animals' );
-
-%%
-
-function clip_table = compute_roi_looking_proportions(...
-  task_file, edf_file, sync_info, clip_table, vid_p, bbox_p)
-
-accept_detect = @(x) x.conf >= 0.1;
-screen_dims = [ task_file.window.Width, task_file.window.Height ];
-
-store_detects = containers.Map();
-
-look_props = nan( height(clip_table), 1 );
+edf_infos = cell( height(clip_table), 1 );
 
 for i = 1:height(clip_table)  
   %%
@@ -79,7 +62,6 @@ for i = 1:height(clip_table)
   vid_name = clip_table.video_filename{i};
   vid_reader = VideoReader( fullfile(vid_p, vid_name) );
   vid_fps = vid_reader.FrameRate;
-  vid_dims = [ vid_reader.Width, vid_reader.Height ];
   
   clip_index = sync_info{sync_info.video_time == clip_table.start(i), 'clip_index'};
   assert( numel(clip_index) == 1 && clip_index == i );
@@ -93,67 +75,36 @@ for i = 1:height(clip_table)
   edf_t0_ind = find( edf_file.Samples.time == edf_start_t );
   edf_t1_ind = find( edf_file.Samples.time == edf_stop_t );
   
-  look_dur = 0;
-  roi_dur = 0;
-  
   %%
   
-  for ti = edf_t0_ind:edf_t1_ind
+  vid_ts = nan( edf_t1_ind - edf_t0_ind + 1, 1 );
+  vid_fis = nan( size(vid_ts) );
+  
+  edf_p = nan( size(vid_ts, 1), 2 );
+  edf_ps = nan( size(edf_p, 2), 1 );
+  
+  for j = 1:edf_t1_ind-edf_t0_ind + 1
+    ti = edf_t0_ind + j - 1;
+    
     curr_edf_t = edf_file.Samples.time(ti);
     edf_px = edf_file.Samples.posX(ti);
     edf_py = edf_file.Samples.posY(ti);
+    ps = edf_file.Samples.pupilSize(ti);
     
-    vid_t = shared_utils.sync.cinterp( ...
+    vid_ts(j) = shared_utils.sync.cinterp( ...
       curr_edf_t, match_clip.edf_time, match_clip.video_time );
-    vid_fi = floor( vid_t * vid_fps );
+    vid_fis(j) = floor( vid_ts(j) * vid_fps );
     
-    bbox_filename = sprintf( 'bbox_%d.mat', vid_fi );
-    bbox_file_p = fullfile( bbox_p, sprintf('%s-bbox', vid_name), bbox_filename );
-    
-    if ( isKey(store_detects, bbox_file_p) )
-      bbox_file = store_detects(bbox_file_p);
-      
-    elseif ( ~exist(bbox_file_p, 'file') )
-      continue
-      
-    else
-      bbox_file = load( bbox_file_p );
-      store_detects(bbox_file_p) = bbox_file;
-    end
-    
-    detections = bbox_file.detections(cellfun(accept_detect, bbox_file.detections));
-    detect_rects = cellfun( ...
-      @(x) bbox_to_pixel_rect(x.bbox, vid_dims, screen_dims), detections, 'un', 0 );
-    
-    is_ib = @(r) edf_px >= r(1) & edf_px < r(3) & edf_py >= r(2) & edf_py < r(4);
-    did_look = any( cellfun(is_ib, detect_rects) );
-    
-    look_dur = look_dur + did_look;
-    % weight `did_look` by whether there was anything to look to.
-    roi_dur = roi_dur + double( ~isempty(detections) );
+    edf_p(j, :) = [ edf_px, edf_py ];
+    edf_ps(j) = ps;
   end
   
-  %%
-  
-  if ( roi_dur ~= 0 )
-    look_props(i) = look_dur / roi_dur;
-  end
+  edf_infos{i} = struct( ...
+      'position', edf_p, 'pupil_size', edf_ps ...
+    , 'video_time', vid_ts ...
+    , 'video_frame', vid_fis ...
+  );
 end
-
-clip_table.look_props = look_props(:);
-
-end
-
-function r = bbox_to_pixel_rect(bbox, im_dims, screen_dims)
-
-p0 = bbox(1:2) .* im_dims;
-wh = bbox(3:4) .* im_dims;
-
-adj_x = (screen_dims(1) - im_dims(1)) * 0.5;
-adj_y = (screen_dims(2) - im_dims(2)) * 0.5;
-
-p0 = p0 + [ adj_x, adj_y ];
-r = [ p0(1), p0(2), p0(1) + wh(1), p0(2) + wh(2) ];
 
 end
 

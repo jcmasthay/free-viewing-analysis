@@ -1,8 +1,10 @@
-root_data_p = '/Volumes/external3/data/changlab/jamie/free-viewing';
+root_data_p = fv_data_directory();
 
 data_p = fullfile( root_data_p, 'data' );
 vid_p = fullfile( root_data_p, 'videos' );
 bbox_p = fullfile( root_data_p, 'detections');
+preproc_p = fullfile( root_data_p, 'looking_proportions' );
+shared_utils.io.require_dir( preproc_p );
 
 % sesh_dir = '08142023';
 sesh_dirs = arrayfun( @(x) sprintf('08%d2023', x), 14:31, 'un', 0 );
@@ -12,17 +14,23 @@ sesh_ps = fullfile( data_p, sesh_dirs );
 sesh_ps = sesh_ps(cellfun(@(x) exist(x, 'file'), sesh_ps) > 0);
 task_file_ps = find_task_data_files( sesh_ps );
 
-task_file_ps = task_file_ps(1:2);
+% task_file_ps = task_file_ps(1:8);
 
-look_prop_cts = cell( numel(task_file_ps), 1 );
+allow_overwrite = false;
 
 parfor i = 1:numel(task_file_ps)
 %%
   
 fprintf( '\n %d of %d', i, numel(task_file_ps) );
 
+save_p = fullfile( preproc_p, sprintf('looking_proportions_%d.mat', i) );
+if ( exist(save_p, 'file') && ~allow_overwrite )
+  continue
+end
+
 task_file = shared_utils.io.fload( task_file_ps{i} );
-edf_file = Edf2Mat( fullfile(data_p, sesh_dir, task_file.edf_file_name) );
+sesh_p = fileparts( task_file_ps{i} );
+edf_file = Edf2Mat( fullfile(sesh_p, task_file.edf_file_name) );
 
 sync_info = extract_edf_sync_info( ...
   edf_file.Events.Messages, task_file.edf_sync_times );
@@ -36,30 +44,30 @@ clip_table.timestamp(:) = task_file.time0_timestamp;
 
 %%
 
-look_prop_cts{i} = compute_roi_looking_proportions( ...
-  task_file, edf_file, sync_info, clip_table, vid_p, bbox_p );
+success = true;
+try
+  curr_look_prop_ct = compute_roi_looking_proportions( ...
+    task_file, edf_file, sync_info, clip_table, vid_p, bbox_p );
+catch err
+  warning( err.message );
+  success = false;
+end
+
+if ( ~success )
+  continue
+end
+
+do_save( save_p, curr_look_prop_ct );
 
 end
 
 %%
 
-look_prop_ct = vertcat( look_prop_cts{:} );
+function do_save(preproc_p, look_prop_ct)
 
-%%
+save( preproc_p, 'look_prop_ct' );
 
-[I, id, C] = rowsets( ...
-  1, look_prop_ct, {'affiliativeness', 'interactive_agency'} );
-
-%%
-
-figure(1);
-clf;
-hist( look_prop_ct.look_props, 10 );
-median( look_prop_ct.look_props )
-xlim( [0, 1] );
-title( 'Proportion of looking to animals' );
-
-%%
+end
 
 function clip_table = compute_roi_looking_proportions(...
   task_file, edf_file, sync_info, clip_table, vid_p, bbox_p)
