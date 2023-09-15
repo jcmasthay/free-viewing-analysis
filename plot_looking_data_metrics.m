@@ -66,6 +66,7 @@ title( axs(1), 'Difference in variance in position for clips seen in vs. out of 
 %%  plot means of variance in position for clip types and block types
 
 mask = edf_samples.affiliativeness ~= 'neutral';
+mask = mask & edf_samples.interactive_agency ~= 'monkey_other_animal';
 
 [I, id, C] = rowsets( 3, edf_samples ...
   , {'interactive_agency'} ...
@@ -84,3 +85,19 @@ figure(1); clf;
 
 % title( 'Mean variance in position for clip and block types' );
 ylabel( axs(1), 'Variance' );
+shared_utils.plot.match_ylims( axs );
+set( axs, 'xticklabelrotation', 10 );
+
+%%  stat for above
+
+group_names = {'affiliativeness', 'interactive_agency', 'block_type'};
+
+props = edf_samples.position_variance(mask, 1);
+prop_tbl = edf_samples(mask, :);
+group = cellfun( @(x) ungroupi(findeach(prop_tbl, x)), group_names, 'un', 0 );
+
+group_labels = fcat.from( cellstr(prop_tbl{:, group_names}), group_names );
+anova_outs = dsp3.anovan( props, group_labels, {}, group_names );
+
+anova_outs.anova_tables{1}
+anova_outs.comparison_tables{1}

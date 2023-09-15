@@ -1,7 +1,7 @@
-block_index = 2;
+block_index = 1;
 
-data_p = 'C:\source\data\free_viewing\08222023';
-bbox_p = 'C:\source\data\bounding_boxes';
+data_p = 'C:\source\data\free_viewing\data\08102023';
+bbox_p = 'C:\source\data\free_viewing\detections';
 
 mats = shared_utils.io.findmat( data_p );
 f = load( mats{block_index} );
