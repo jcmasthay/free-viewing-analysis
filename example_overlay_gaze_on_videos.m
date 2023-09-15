@@ -39,9 +39,17 @@ for i = begin:begin+min(max_num_clips, size(clip_table, 1))-1
     vid_file_p = char( fullfile(vid_p, curr_clip.video_filename) );
   end
 
+  try
+    bboxes = load( fullfile(bbox_p, sprintf('%s-bbox', char(curr_clip.video_filename)), 'all_bboxes.mat') );
+    bboxes = bboxes.detections;
+  catch err
+    warning( err.message );
+    bboxes = {};
+  end
+
   vid_reader = VideoReader( vid_file_p );
   context.Value.video_reader = vid_reader;
-  context.Value.bbox_p = fullfile( bbox_p, sprintf('%s-bbox', char(curr_clip.video_filename)) );
+  context.Value.bboxes = bboxes;
   context.Value.confidence_threshold = conf_threshold;
 
   draw_cb = @(t) overlay_gaze( win, context, e, sync_info, i, t, pupil_threshs );
@@ -117,17 +125,20 @@ vid_reader = context.Value.video_reader;
 frame_index = floor( t0 * vid_reader.FrameRate );
 im_dims = [ vid_reader.Width, vid_reader.Height ];
 
-bbox_p = context.Value.bbox_p;
-bbox_p = fullfile( bbox_p, sprintf('bbox_%d.mat', frame_index) );
+bboxes = context.Value.bboxes;
+accept_detect = @(x) x.conf >= context.Value.confidence_threshold;
 
-if ( exist(bbox_p, 'file') )
-  accept_detect = @(x) x.conf >= context.Value.confidence_threshold;
-  bboxes = load( bbox_p );
-  detections = bboxes.detections(cellfun(accept_detect, bboxes.detections));
-  
-  for i = 1:numel(detections)
-    bbox = bbox_to_pixel_rect( detections{i}.bbox, im_dims, [win.Width, win.Height] );
-    Screen( 'FrameRect', win.WindowHandle, [255, 255, 0], bbox, 4 );
+if ( frame_index <= numel(bboxes) )
+  detections = bboxes{frame_index};
+  if ( ~isequal(detections, struct) )
+    detections = detections(cellfun(accept_detect, detections));
+    colors = { [255, 0, 0], [0, 255, 0], [0, 0, 255] };
+    
+    for i = 1:numel(detections)
+      bbox = bbox_to_pixel_rect( detections{i}.bbox, im_dims, [win.Width, win.Height] );
+      color = colors{str2double(detections{i}.category)};
+      Screen( 'FrameRect', win.WindowHandle, color, bbox, 4 );
+    end
   end
 end
 
