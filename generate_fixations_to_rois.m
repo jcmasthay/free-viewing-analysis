@@ -56,6 +56,8 @@ per_file_outs{si} = table( curr_ib_detects, curr_could_fix, curr_did_fix ...
 
 end
 
+%%
+
 file_outs = vertcat( per_file_outs{:} );
 ib_detects = file_outs.ib_detects;
 could_fix = file_outs.could_fix;
