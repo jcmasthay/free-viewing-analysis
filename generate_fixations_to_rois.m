@@ -217,9 +217,9 @@ rect_area = @(r) max(0, r(3)-r(1)) * max(0, r(4)-r(2));
 base_area = sum( cellfun(rect_area, rs) );
 isect_area = 0;
 
-for i = 1:numel(rs)
-  for j = 1:numel(rs)
-    if ( i == j ), continue; end
+for i = 1:numel(rs)-1
+  for j = i+1:numel(rs)
+    
     r0 = rs{i};
     r1 = rs{j};
   

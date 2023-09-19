@@ -48,13 +48,15 @@ file_outs = vertcat( per_file_outs{:} );
 %%  duration of each category per fixation
 
 is_prop = true;
-is_weighted = true;
+is_weighted = false;
 
 if ( is_weighted )
   plt_vec = file_outs.weighted_dur_did_fix;
 else
   plt_vec = file_outs.dur_did_fix;
 end
+
+plt_vec(plt_vec < 0) = nan;
 
 if ( is_prop )
   if ( is_weighted )
