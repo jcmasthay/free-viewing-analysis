@@ -34,9 +34,9 @@ fname = shared_utils.io.filenames( samp_files{si}, true );
 clip_table = shared_utils.io.fload( samp_files{si} );
 clip_table = convert_char_vars_to_string( clip_table );
 
-% @TODO: Haven't generated ROIs for these yet.
-has_mk = contains( clip_table.video_filename, 'Monkey Kingdom' );
-clip_table(has_mk, :) = [];
+% % @TODO: Haven't generated ROIs for these yet.
+% has_mk = contains( clip_table.video_filename, 'Monkey Kingdom' );
+% clip_table(has_mk, :) = [];
 
 edf_infos = clip_table.edf_info;
 vid_names = clip_table.video_filename;
@@ -180,8 +180,9 @@ for i = 1:numel(edf_infos)
         tmp_did_fix = tmp_did_fix | (match_frame * ib_rect(ci));
       end
       
-      weighted_dur_did_fix(j, k) = sum( double(tmp_did_fix(:)') .* fix_area_props(k, :) );
-      area_weight(j, k) = sum( fix_area_props(k, :) );
+      % proportionally smaller rois should have higher weight.
+      weighted_dur_did_fix(j, k) = sum( double(tmp_did_fix(:)') ./ fix_area_props(k, :) );
+      area_weight(j, k) = sum( 1 ./ fix_area_props(k, :) );
       
       dur_did_fix(j, k) = dur_did_fix(j, k) + sum( tmp_did_fix );
       dur_could_fix(j, k) = dur_could_fix(j, k) + sum( tmp_could_fix );
