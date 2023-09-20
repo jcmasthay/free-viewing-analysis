@@ -14,10 +14,14 @@ for si = 1:numel(fix_info_files)
   if ( isempty(file_outs) ), continue; end
   
   fname = shared_utils.io.filenames( fix_info_files{si}, true );
+  sesh_dt = datetime( strrep(fname(1:20), '_', ':') );
+  sesh_sesh = datestr( sesh_dt, 'mmddyyyy' );
   
   clip_table = shared_utils.io.fload( fullfile(ct_p, fname) );
   clip_table = convert_char_vars_to_string( clip_table );
   file_outs = [ file_outs, clip_table(file_outs.src_index, :) ];
+  file_outs.file_name = repmat( string(fname), rows(file_outs), 1 );
+  file_outs.session = repmat( string(sesh_sesh), rows(file_outs), 1 );
   
   ind_sets = repmat( 1:rows(file_outs), 1, numel(category_names) );
   ind_ind = repelem( 1:numel(category_names), rows(file_outs) );
@@ -25,7 +29,8 @@ for si = 1:numel(fix_info_files)
   per_cat_outs = file_outs(ind_sets, :);
   per_cat_outs.category = columnize( category_names(ind_ind) );
   
-  flat_vars = { 'could_fix', 'did_fix', 'dur_could_fix', 'dur_did_fix', 'weighted_dur_did_fix', 'area_weight' };
+  flat_vars = { ...
+    'could_fix', 'did_fix', 'dur_could_fix', 'dur_did_fix', 'weighted_dur_did_fix', 'area_weight' };
   
   for j = 1:numel(flat_vars)
     per_cat_outs.(flat_vars{j}) = columnize( file_outs{:, flat_vars(j)} );
@@ -45,10 +50,59 @@ file_outs = vertcat( per_file_outs{:} );
 % could_fix = file_outs.could_fix;
 % did_fix = file_outs.did_fix;
 
+%%  duration of each category, affil vs aggressive
+
+is_prop = false;
+
+if ( is_prop )
+  dur = file_outs.dur_did_fix ./ file_outs.dur_could_fix;
+else
+  dur = file_outs.dur_did_fix;
+end
+
+sub_each = {'block_type', 'interactive_agency', 'category', 'session'};
+[I, C] = findeach( file_outs, sub_each );
+C.affiliativeness = repmat( "affil - aggressive", size(I) );
+
+affil_ind = find( file_outs.affiliativeness == 'affiliative' );
+aggr_ind = find( file_outs.affiliativeness == 'aggressive' );
+
+mu_diff = nan( size(I) );
+
+for i = 1:numel(I)
+  affil = intersect( affil_ind, I{i} );
+  aggr = intersect( aggr_ind, I{i} );
+  mu_diff(i) = nanmean( dur(affil) ) - nanmean( dur(aggr) );
+end
+
+plt_vec = mu_diff;
+mask = C.block_type == 'A';
+
+[I, id, C] = rowsets( 4, C ...
+  , {'block_type', 'affiliativeness'}, {'interactive_agency'}, {'category'}, {} ...
+  , 'mask', mask, 'to_string', true );
+C = strrep( C, '_', ' ');
+
+figure(2); clf;
+[axs, hs, xs] = plots.simplest_barsets( plt_vec, I, id, C ...
+  , 'summary_func', @nanmean ...
+  , 'error_func', @plotlabeled.nansem ...
+  , 'add_points', false ...
+);
+
+set( axs, 'xticklabelrotation', 10 );
+shared_utils.plot.match_ylims( axs );
+
+if ( is_prop )
+  ylabel( axs(1), 'delta (proportion of fixation)' );
+else
+  ylabel( axs(1), 'delta (fixation duration)' );
+end
+
 %%  duration of each category per fixation
 
-is_prop = true;
-is_weighted = false;
+is_prop = false;
+is_weighted = true;
 
 if ( is_weighted )
   plt_vec = file_outs.weighted_dur_did_fix;
