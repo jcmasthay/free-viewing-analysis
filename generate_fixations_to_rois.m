@@ -16,6 +16,7 @@ category_names = [ "animal", "human", "vehicle" ];
 %%
 
 per_file_outs = cell( numel(samp_files), 1 );
+allow_overwrite = false;
 
 %%
 
@@ -28,6 +29,11 @@ fprintf( '\n %d of %d', si, numel(samp_files) );
 %%
 
 fname = shared_utils.io.filenames( samp_files{si}, true );
+dst_p = fullfile( save_p, fname );
+
+if ( ~allow_overwrite && exist(dst_p, 'file') )
+  continue
+end
   
 %%
   
@@ -48,19 +54,19 @@ category_types = { '1', '2', '3' };
 
 %%
 
-% try  
+try  
   
 detects_tbl = process_clip_table( ...
     edf_infos, vid_names, vid_p, bbox_p, screen_dims, conf_threshold ...
   , category_types ...
 );
 
-do_save( fullfile(save_p, fname), detects_tbl );
+do_save( dst_p, detects_tbl );
 
-% catch err
-%   fprintf( '\n\n\n ||| %d failed', si );
+catch err
+  fprintf( '\n\n\n ||| %d failed', si );
 %   throw( err );
-% end
+end
 
 % per_file_outs{si} = tot_tbl;
 
