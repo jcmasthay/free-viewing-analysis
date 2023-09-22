@@ -102,7 +102,8 @@ end
 %%  duration of each category per fixation
 
 is_prop = false;
-is_weighted = true;
+is_weighted = false;
+only_nz = false;
 
 if ( is_weighted )
   plt_vec = file_outs.weighted_dur_did_fix;
@@ -111,6 +112,10 @@ else
 end
 
 plt_vec(plt_vec < 0) = nan;
+
+if ( only_nz )
+  plt_vec(plt_vec == 0) = nan;
+end
 
 if ( is_prop )
   if ( is_weighted )
@@ -124,21 +129,75 @@ end
 mask = rowmask( plt_vec );
 mask = file_outs.block_type == 'A';
 
-[I, id, C] = rowsets( 4, file_outs ...
-  , {'block_type', 'affiliativeness'}, {'interactive_agency'}, {'category'}, {} ...
-  , 'mask', mask, 'to_string', true );
-C = strrep( C, '_', ' ');
+is_violin = true;
 
-figure(2); clf;
-[axs, hs, xs] = plots.simplest_barsets( plt_vec, I, id, C ...
-  , 'summary_func', @nanmean ...
-  , 'error_func', @plotlabeled.nansem ...
-  , 'add_points', false ...
+if ( is_violin )  
+  [I, id, C] = rowsets( 3, file_outs ...
+    , {'category'} ...
+    , {'category', 'block_type', 'interactive_agency'} ...
+    , {'affiliativeness'}, 'mask', mask, 'to_string', true );
+  C = strrep( C, '_', ' ');
+  
+  fi = findeach( id, 1 );
+  all_axs = {};
+  figs = cell( numel(fi), 1 );
+  titles = cell( size(figs) );
+  for i = 1:numel(fi)
+    figure(i); clf;
+    axs = plots.violins( plt_vec, I(fi{i}), id(fi{i}, 2:end), C(fi{i}, 2:end) );    
+    all_axs{end+1, 1} = axs;
+    figs{i} = gcf;
+    titles{i} = char( get(get(axs(1), 'title'), 'string'));
+  end
+  all_axs = vertcat( all_axs{:} );
+  if ( is_prop ), ylim( all_axs, [0, 1] ); end
+  if ( ~is_prop ), ylim( all_axs, [0, 1500] ); end
+  if ( is_prop ), ylab = 'Proportion of fixation spent in ROI'; end
+  if ( ~is_prop ), ylab = 'Fixation duration (ms) spent in ROI'; end
+  ylabel( all_axs, ylab );
+  
+  if ( 0 )
+    for i = 1:numel(figs)
+      fname = titles{i};
+      if ( only_nz ), fname = sprintf( 'only_nonzero_%s', fname ); end
+      shared_utils.plot.save_fig( figs{i} ...
+        , fullfile(fv_data_directory, 'plots', 'violin', fname), {'png'}, true );
+    end
+  end
+  
+else
+  [I, id, C] = rowsets( 4, file_outs ...
+    , {'block_type', 'category'}, {'affiliativeness'}, {'interactive_agency'}, {} ...
+    , 'mask', mask, 'to_string', true );
+  C = strrep( C, '_', ' ');
+
+  figure(1); clf;
+  [axs, hs, xs] = plots.simplest_barsets( plt_vec, I, id, C ...
+    , 'summary_func', @nanmean ...
+    , 'error_func', @plotlabeled.nansem ...
+    , 'add_points', false ...
+  );
+
+  set( axs, 'xticklabelrotation', 10 );
+  shared_utils.plot.match_ylims( axs );
+  if ( is_prop ), ylim( axs, [0, 1] ); end
+  
+  if ( is_prop ), ylab = 'Proportion of fixation spent in ROI'; end
+  if ( ~is_prop ), ylab = 'Fixation duration (ms) spent in ROI'; end
+  ylabel( axs, ylab );
+  
+  fname = char( get(get(axs(1), 'title'), 'string'));
+  if ( only_nz ), fname = sprintf( 'only_nonzero_%s', fname ); end
+  shared_utils.plot.save_fig( gcf ...
+    , fullfile(fv_data_directory, 'plots', 'bar', fname), {'png'}, true );
+end
+
+tot_cats = { 'block_type', 'category', 'affiliativeness', 'interactive_agency' };
+f = fcat.from( cellstr(file_outs{:, tot_cats}), tot_cats );
+stats = dsp3.anovan( ...
+  plt_vec, f, {'category', 'block_type'}, {'affiliativeness', 'interactive_agency'} ...
+  , 'mask', find(mask) ...
 );
-
-set( axs, 'xticklabelrotation', 10 );
-shared_utils.plot.match_ylims( axs );
-if ( is_prop ), ylim( axs, [0, 1] ); end
 
 %%  clip level proportions of vehicles / humans / animal
 
