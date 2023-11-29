@@ -1,7 +1,7 @@
 block_index = 1;
 
-data_p = 'C:\source\data\free_viewing\data\08102023';
-bbox_p = 'C:\source\data\free_viewing\detections';
+data_p = 'D:\data\changlab\jamie\free-viewing\data\08142023';
+bbox_p = 'D:\data\changlab\jamie\free_viewing\detections';
 
 mats = shared_utils.io.findmat( data_p );
 f = load( mats{block_index} );
@@ -16,6 +16,7 @@ pupil_threshs = pupil_limits( e.Samples.pupilSize );
 
 position_trail = ptb.Reference( struct('history', []) );
 context = ptb.Reference( struct('position_trail', position_trail) );
+context.Value.images = {};
 
 begin = 1;
 max_num_clips = 20;
@@ -187,6 +188,9 @@ end
 
 trail_len = 15;
 update_trail( context.Value.position_trail, [x, y, psf], trail_len );
+
+image = Screen( 'GetImage', win.WindowHandle );
+context.Value.images{end+1} = image;
 
 function r = make_rect(x, y, s, psf)
   adj_s = s * 0.5;
