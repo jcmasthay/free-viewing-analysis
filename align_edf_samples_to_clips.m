@@ -10,7 +10,7 @@ poss_folders = shared_utils.io.filenames( poss_folders );
 sesh_dirs = poss_folders(cellfun(@(x) numel(x) == 8, poss_folders));
 
 sesh_dts = session_to_datetime( sesh_dirs );
-sesh_dirs = sesh_dirs(sesh_dts >= session_to_datetime('08142023'));
+sesh_dirs = sesh_dirs(sesh_dts >= session_to_datetime('10012023'));
 
 % sesh_dir = '08142023';
 % sesh_dirs = arrayfun( @(x) sprintf('08%d2023', x), 14:31, 'un', 0 );
@@ -21,6 +21,7 @@ sesh_ps = sesh_ps(cellfun(@(x) exist(x, 'file'), sesh_ps) > 0);
 task_file_ps = find_task_data_files( sesh_ps );
 
 allow_overwrite = true;
+save_data = true;
 
 %%
 
@@ -46,9 +47,13 @@ edf_file = Edf2Mat( fullfile(sesh_p, task_file.edf_file_name) );
 sync_info = extract_edf_sync_info( ...
   edf_file.Events.Messages, task_file.edf_sync_times );
 
-dend_table = shared_utils.io.fload( fullfile(data_p, 'dendro_table.mat') );
-clip_table = append_clip_meta_data_to_clip_table( ...
-  task_file.params.target_clips, task_file.clip_table, dend_table );
+if ( 1 )
+  clip_table = task_file.params.meta_data.shots;
+else
+  dend_table = shared_utils.io.fload( fullfile(data_p, 'dendro_table.mat') );
+  clip_table = append_clip_meta_data_to_clip_table( ...
+    task_file.params.target_clips, task_file.clip_table, dend_table );
+end
 
 clip_table.timestamp = NaT( rows(clip_table), 1 );
 clip_table.timestamp(:) = task_file.time0_timestamp;
@@ -58,7 +63,11 @@ clip_table.timestamp(:) = task_file.time0_timestamp;
 try
   edf_info = compute_edf_sample_traces( edf_file, sync_info, clip_table, vid_p );
   clip_table.edf_info = edf_info;
-  do_save( save_p, clip_table );
+  if ( save_data )
+    do_save( save_p, clip_table );
+  else
+    fprintf( '\n Would save: "%s"\n.', save_p );
+  end
 catch err
   warning( err.message );
 end
@@ -86,8 +95,13 @@ for i = 1:height(clip_table)
   vid_reader = VideoReader( fullfile(vid_p, vid_name) );
   vid_fps = vid_reader.FrameRate;
   
-  clip_index = sync_info{sync_info.video_time == clip_table.start(i), 'clip_index'};
-  assert( numel(clip_index) == 1 && clip_index == i );
+  [~, ci] = min( abs(sync_info.video_time - clip_table.start(i)) );
+  clip_index = sync_info{ci, 'clip_index'};
+  try
+    assert( numel(clip_index) == 1 && clip_index == i, 'non matching clip' );
+  catch err
+    rethrow( err );
+  end
   match_clip = sync_info(sync_info.clip_index == clip_index, :);
   
   [~, start_ind] = min( match_clip.video_time );

@@ -1,6 +1,6 @@
 block_index = 1;
 
-data_p = 'D:\data\changlab\jamie\free-viewing\data\08142023';
+data_p = 'D:\data\changlab\jamie\free-viewing\data\12212023';
 bbox_p = 'D:\data\changlab\jamie\free_viewing\detections';
 
 mats = shared_utils.io.findmat( data_p );
@@ -16,13 +16,13 @@ pupil_threshs = pupil_limits( e.Samples.pupilSize );
 
 position_trail = ptb.Reference( struct('history', []) );
 context = ptb.Reference( struct('position_trail', position_trail) );
-context.Value.images = {};
 
 begin = 1;
 max_num_clips = 20;
 conf_threshold = 0.6;
 
 vid_p = fullfile( project_directory, 'videos' );
+vid_p = 'D:\data\changlab\jamie\free-viewing\videos';
 scram_vid_p = fullfile( vid_p, 'scrambled' );
 
 win = ptb.Window( [0, 0, 1600, 900] );
@@ -41,7 +41,8 @@ for i = begin:begin+min(max_num_clips, size(clip_table, 1))-1
   end
 
   try
-    bboxes = load( fullfile(bbox_p, sprintf('%s-bbox', char(curr_clip.video_filename)), 'all_bboxes.mat') );
+    bboxes = load( fullfile(...
+      bbox_p, sprintf('%s-bbox', char(curr_clip.video_filename)), 'all_bboxes.mat') );
     bboxes = bboxes.detections;
   catch err
     warning( err.message );
@@ -52,9 +53,17 @@ for i = begin:begin+min(max_num_clips, size(clip_table, 1))-1
   context.Value.video_reader = vid_reader;
   context.Value.bboxes = bboxes;
   context.Value.confidence_threshold = conf_threshold;
+  context.Value.images = {};
+  context.Value.meta = [];
 
   draw_cb = @(t) overlay_gaze( win, context, e, sync_info, i, t, pupil_threshs );
   play_movie( win, vid_file_p, curr_clip.start, curr_clip.stop, [], draw_cb );
+  
+  if ( 1 )
+    overlay_p = fullfile( fileparts(bbox_p), 'videos_overlaying_gaze' );
+    shared_utils.io.require_dir( overlay_p );
+%     vw = VideoWriter( fullfile(overlay_p, 
+  end
 end
 
 catch err
@@ -191,6 +200,22 @@ update_trail( context.Value.position_trail, [x, y, psf], trail_len );
 
 image = Screen( 'GetImage', win.WindowHandle );
 context.Value.images{end+1} = image;
+
+meta = struct();
+meta.edf_t0_ind = edf_t0_ind;
+meta.edf_t1_ind = edf_t1_ind;
+meta.frame_index = frame_index;
+meta.clip_i0 = i0;
+meta.clip_i1 = i1;
+meta.t0 = t0;
+meta.t1 = t1;
+meta.frac_t1 = f0;
+
+if ( ~isfield(context.Value, 'meta') || isempty(context.Value.meta) )
+  context.Value.meta = meta;
+else
+  context.Value.meta(end+1) = meta;
+end
 
 function r = make_rect(x, y, s, psf)
   adj_s = s * 0.5;
