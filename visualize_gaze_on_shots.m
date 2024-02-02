@@ -1,8 +1,11 @@
-samps_p = 'D:\data\changlab\jamie\free-viewing\edf_samples';
+% samps_p = 'D:\data\changlab\jamie\free-viewing\edf_samples';
+samps_p = '/Volumes/external3/data/changlab/jamie/free-viewing/edf_samples';
+
 samps_files = shared_utils.io.findmat( samps_p );
-samps = shared_utils.io.fload( samps_files{3} );
+samps = shared_utils.io.fload( samps_files{1} );
 
 vid_p = 'D:\data\changlab\jamie\free-viewing\videos';
+vid_p = '/Volumes/external3/data/changlab/jamie/free-viewing/videos';
 
 %%
 
@@ -18,6 +21,8 @@ figure(1); clf;
 ax_im = subplot( 3, 1, 1 );
 ax_pos = subplot( 3, 1, 2 );
 ax_pup = subplot( 3, 1, 3 );
+
+sizes = @(x, y) arrayfun( @(y) size(x, y), y );
 
 for idx = 1:size(samps, 1)
   
@@ -36,8 +41,8 @@ vr = VideoReader( fullfile(use_vid_p, shot.video_filename{1}) );
 for i = 1:numel(I)
   frame = read( vr, frames(i)+1 );
   bg_frame = zeros( [900, 1600, 3] );
-  offi = floor( (size(bg_frame, 1:2 ) - size(frame, 1:2)) * 0.5 ) + 1;
-  endi = offi + size( frame, 1:2 ) - 1;
+  offi = floor( (sizes(bg_frame, 1:2 ) - sizes(frame, 1:2)) * 0.5 ) + 1;
+  endi = offi + sizes( frame, 1:2 ) - 1;
   bg_frame(offi(1):endi(1), offi(2):endi(2), :) = double( frame ) / 255;
   
   pos = mean( edf_info.position(I{i}, :), 1 );
