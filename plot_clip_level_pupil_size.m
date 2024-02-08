@@ -42,5 +42,4 @@ axs = plots.panels( [3, 1] );
 plot( axs(1), video_t, pupil_size );
 plot( axs(2), video_t, cleaned_pup );
 plot( axs(3), video_t, smoothed_pup );
-
 arrayfun( @(x) title(x, title_str), axs );
