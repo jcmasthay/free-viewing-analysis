@@ -20,7 +20,7 @@ sesh_ps = fullfile( data_p, sesh_dirs );
 sesh_ps = sesh_ps(cellfun(@(x) exist(x, 'file'), sesh_ps) > 0);
 task_file_ps = find_task_data_files( sesh_ps );
 
-allow_overwrite = true;
+allow_overwrite = false;
 save_data = true;
 
 %%
