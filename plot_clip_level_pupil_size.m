@@ -58,7 +58,7 @@ samps.search_start_stop = get_merged_shot_starts_stops( samps );
 
 [I, C] = findeach( samps, {'timestamp', 'Code', 'block_type'} );
 sel = find( ...
-  strcmp(C.Code, 'Mandrill_Ingroup_CompeteMate') & ...
+  strcmp(C.Code, 'Baboon_AggressiveDominanceDisplay') & ...
   strcmp(C.block_type, 'A'));
 
 keep_vars = { 'identifier', 'Code', 'timestamp' };
@@ -95,12 +95,12 @@ for i = 1:size(all_traces, 1)
   plot( axs(smooth_ax_ind), all_traces.video_t{i}, all_traces.smoothed_pup{i} );
   hold( axs(smooth_ax_ind), 'on' );
   
-  plot( axs(rating_ax_ind), all_traces.video_t{i}, all_traces.affil_aggr_ratings{i}, 'b' );
+  plot( axs(rating_ax_ind), all_traces.video_t{i}, all_traces.affil_aggr_ratings{i} );
   hold( axs(rating_ax_ind), 'on' );
   
   if ( i == 1 )
-    plot( axs(rating_ax_ind), all_traces.video_t{i}, all_traces.affil_aggr_ratings{i} - all_traces.affil_aggr_ratings_err{i}, 'b' );
-    plot( axs(rating_ax_ind), all_traces.video_t{i}, all_traces.affil_aggr_ratings{i} + all_traces.affil_aggr_ratings_err{i}, 'b' );
+    plot( axs(rating_ax_ind), all_traces.video_t{i}, all_traces.affil_aggr_ratings{i} - all_traces.affil_aggr_ratings_err{i} );
+    plot( axs(rating_ax_ind), all_traces.video_t{i}, all_traces.affil_aggr_ratings{i} + all_traces.affil_aggr_ratings_err{i} );
   end
   
   lum = lum_table.luminance{string(lum_table.code) == all_traces.Code(i)};
