@@ -103,7 +103,7 @@ end
 
 is_prop = false;
 is_weighted = false;
-only_nz = false;
+only_nz = true;
 
 if ( is_weighted )
   plt_vec = file_outs.weighted_dur_did_fix;
@@ -128,13 +128,17 @@ end
 
 mask = rowmask( plt_vec );
 mask = file_outs.block_type == 'A';
+mask = mask & file_outs.category ~= 'vehicle';
+% mask = mask & file_outs.category == 'animal';
 
-is_violin = true;
+plt_type = 'box';
+is_violin_or_box = ismember( plt_type, {'box', 'violin'} );
+is_box = contains( plt_type, 'box' );
 
-if ( is_violin )  
+if ( is_violin_or_box )  
   [I, id, C] = rowsets( 3, file_outs ...
-    , {'category'} ...
-    , {'category', 'block_type', 'interactive_agency'} ...
+    , {} ...
+    , {, 'block_type', 'interactive_agency'} ...
     , {'affiliativeness'}, 'mask', mask, 'to_string', true );
   C = strrep( C, '_', ' ');
   
@@ -144,24 +148,30 @@ if ( is_violin )
   titles = cell( size(figs) );
   for i = 1:numel(fi)
     figure(i); clf;
-    axs = plots.violins( plt_vec, I(fi{i}), id(fi{i}, 2:end), C(fi{i}, 2:end) );    
+    if ( is_box )
+      [PI, PL] = plots.nest2( id(fi{i}, 2:end), I(fi{i}), C(fi{i}, 2:end) );
+      axs = plots.panels( numel(PI) );
+      plots.simple_boxsets( axs, plt_vec, PI, PL );
+    else
+      axs = plots.violins( plt_vec, I(fi{i}), id(fi{i}, 2:end), C(fi{i}, 2:end) );    
+    end
     all_axs{end+1, 1} = axs;
     figs{i} = gcf;
     titles{i} = char( get(get(axs(1), 'title'), 'string'));
   end
   all_axs = vertcat( all_axs{:} );
   if ( is_prop ), ylim( all_axs, [0, 1] ); end
-  if ( ~is_prop ), ylim( all_axs, [0, 1500] ); end
+  if ( ~is_prop ), ylim( all_axs, [-100, 1500] ); end
   if ( is_prop ), ylab = 'Proportion of fixation spent in ROI'; end
   if ( ~is_prop ), ylab = 'Fixation duration (ms) spent in ROI'; end
   ylabel( all_axs, ylab );
   
-  if ( 0 )
+  if ( 1 )
     for i = 1:numel(figs)
       fname = titles{i};
       if ( only_nz ), fname = sprintf( 'only_nonzero_%s', fname ); end
       shared_utils.plot.save_fig( figs{i} ...
-        , fullfile(fv_data_directory, 'plots', 'violin', fname), {'png'}, true );
+        , fullfile(fv_data_directory, 'plots', plt_type, fname), {'png', 'svg', 'epsc'}, true );
     end
   end
   
@@ -194,10 +204,39 @@ end
 
 tot_cats = { 'block_type', 'category', 'affiliativeness', 'interactive_agency' };
 f = fcat.from( cellstr(file_outs{:, tot_cats}), tot_cats );
-stats = dsp3.anovan( ...
+anova_mask = intersect( find(mask), findnone(f, 'neutral') );
+anova_mask = find( mask );
+anova_stats = dsp3.anovan( ...
   plt_vec, f, {'category', 'block_type'}, {'affiliativeness', 'interactive_agency'} ...
-  , 'mask', find(mask) ...
+  , 'mask', anova_mask ...
 );
+
+%%
+
+poss_affil = { 'aggressive', 'affiliative', 'neutral' };
+pairs = { [1, 2], [1, 3], [2, 3] };
+
+tot_tbls = table;
+
+for i = 1:numel(pairs)
+  a = poss_affil{pairs{i}(1)};
+  b = poss_affil{pairs{i}(2)};  
+  rs_stats = dsp3.ranksum( ...
+    plt_vec, f, {'block_type', 'interactive_agency'}, a, b ...
+    , 'mask', anova_mask );
+  miss = cellfun( @(x) isnan(x.p), rs_stats.rs_tables );
+  keep_tbls = rs_stats.rs_tables(~miss);
+  keep_ls = rs_stats.rs_labels(find(~miss));
+  keep_tbls = vertcat( keep_tbls{:} );
+  setcat( keep_ls, 'affiliativeness', sprintf('%s vs %s', a, b) );
+  keep_tbls.affiliativeness = keep_ls(:, 'affiliativeness');
+  keep_tbls.interaction = keep_ls(:, 'interactive_agency');
+  tot_tbls = [ tot_tbls; keep_tbls ];
+end
+
+% rs_stats = dsp3.ranksum( ...
+%   plt_vec, f, {'block_type', 'interactive_agency'}, 'aggressive', 'neutral' ...
+%   , 'mask', anova_mask )
 
 %%  clip level proportions of vehicles / humans / animal
 
