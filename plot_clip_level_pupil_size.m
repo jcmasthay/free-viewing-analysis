@@ -2,18 +2,26 @@ load( '~/Downloads/data.mat' );
 %%
 
 samps_p = '/Volumes/external3/data/changlab/jamie/free-viewing/edf_samples';
+bbox_p = '/Volumes/external3/data/changlab/jamie/free-viewing/detections';
 samps_files = shared_utils.io.findmat( samps_p );
+
+%%
 
 %%  load survey data
 
-vid_infos = readtable( '/Users/efedogruoz/Desktop/all_data.xlsx' );
+vid_infos = readtable( '~/Downloads/all_data.xlsx' );
 vid_infos.code = string( deblank(vid_infos.code) );
 vid_infos.prolific_pid = string( deblank(vid_infos.prolific_pid) );
 % vid_infos.timestamp = datetime( vid_infos.timestamp );
 
+%%  load video info
+
+video_info = shared_utils.io.fload( ...
+  '/Volumes/external3/data/changlab/jamie/free-viewing/videos/vid_info.mat' );
+
 %%
 
-lum_table = shared_utils.io.fload( '/Users/efedogruoz/Desktop/free-viewing-analysis-main/lum.mat' );
+lum_table = shared_utils.io.fload( '/Volumes/external3/data/changlab/jamie/free-viewing/videos/lum.mat' );
 
 %%  load all files
 
@@ -35,9 +43,10 @@ shots = unique( samps(:, {'identifier', 'start', 'stop', }) );
 
 of_interest = intersect(unique(C.Code), unique(vid_infos.code));
 of_interest = intersect(of_interest, lum_table.code);
-of_interest = {'Odd_Bird_Seduction_Techniques'};
+% of_interest = {'Odd_Bird_Seduction_Techniques'};
 
 sel = find( ismember( C.Code, of_interest ) );
+sel
 
 keep_vars = { 'identifier', 'block_type', 'Code', 'timestamp' };
 
@@ -55,6 +64,41 @@ for i = 1:numel(sel)
 end
 
 all_traces = sort_traces(all_traces);
+
+%%
+
+codes = unique( all_traces(:, 'Code') );
+for i = 1:size(codes, 1)
+  bbox_mat = shared_utils.io.fload(...
+    fullfile(bbox_p, sprintf('%s.avi-bbox', codes.Code{i}), 'all_bboxes.mat') );
+  
+  for j = 1:numel(bbox_mat)
+    frame_bboxes = bbox_mat{j};
+    for k = 1:numel(frame_bboxes)
+      normalized_bbox = frame_bboxes{k}.bbox;
+      scaled_bbox = normalized_bbox .* 
+      
+      error( 'xx' );
+    end
+  end
+end
+
+%%  time in vs. out of social roi
+
+%{
+
+0. show time spent in social ROI vs. nonsocial ROI
+1. compute continuous traces of in vs. out of social ROI
+2. select shots with a ~similar baseline probability of being in a social
+  ROI (determined by area of rois on screen)
+3. 
+
+%}
+
+for i = 1:size(all_traces, 1)
+  
+    
+end
 
 %%  decompose clip-level traces into shot-level traces
 
@@ -89,7 +133,7 @@ for i = 1:size(mean_traces, 1)
     [~, ind0] = get_t( t0 );
     [~, ind1] = get_t( t1 );
     
-    if ( j > 1 )    
+    if ( j > 1 )
       [~, prev_i0] = get_t( shots.start(match_shot(j-1)) );
       [~, prev_i1] = get_t( shots.stop(match_shot(j-1)) );
       prev_shot_rating = median( rating_trace(prev_i0:prev_i1) );
@@ -114,11 +158,11 @@ end
 %%
 
 vb = 'change_in_shot_rating';
-vb = 'shot_rating';
+% vb = 'shot_rating';
 is_abs_rating = false;
-req_sign_change = false;
+req_sign_change = true;
 only_aggr_rating = false;
-only_affil_rating = false;
+only_affil_rating = true;
 
 % shot_durs = shot_level_traces.stop - shot_level_traces.start;
 num_samps = cellfun( @numel, shot_level_traces.pupil_trace );
@@ -173,8 +217,14 @@ if ( is_abs_rating )
   shot_ratings = abs( shot_ratings );
 end
 
-[I, C] = findeach( ...
-  shot_level_traces(ok_shots(surviving_shots), :), 'code' );
+if ( 1 )
+  [I, C] = findeach( ...
+    shot_level_traces(ok_shots(surviving_shots), :), {} );
+  C = {C};
+else
+  [I, C] = findeach( ...
+    shot_level_traces(ok_shots(surviving_shots), :), 'code' );
+end
 
 figure(1); clf;
 

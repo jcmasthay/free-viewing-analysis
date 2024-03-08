@@ -2,7 +2,12 @@
 
 root_p = fv_data_directory;
 fix_info_files = shared_utils.io.findmat( fullfile(root_p, 'fix_infos'));
-ct_p = fullfile( root_p, 'clip_tables' );
+ct_p = fullfile( root_p, 'edf_samples' );
+ct_files = shared_utils.io.findmat( ct_p );
+ct_names = shared_utils.io.filenames( ct_files, true );
+
+keep_files = ismember( shared_utils.io.filenames(fix_info_files, true), ct_names );
+fix_info_files = fix_info_files(keep_files);
 
 category_names = [ "animal", "human", "vehicle" ];
 per_file_outs = cell( numel(fix_info_files), 1 );
@@ -45,10 +50,51 @@ end
 
 %%
 
+vid_infos = readtable( '~/Downloads/all_data.xlsx' );
+vid_infos.code = string( deblank(vid_infos.code) );
+vid_infos.prolific_pid = string( deblank(vid_infos.prolific_pid) );
+
+%%
+
 file_outs = vertcat( per_file_outs{:} );
 % ib_detects = file_outs.ib_detects;
 % could_fix = file_outs.could_fix;
 % did_fix = file_outs.did_fix;
+
+%%  duration of each category
+
+is_prop = true;
+
+if ( is_prop )
+  dur = file_outs.dur_did_fix ./ file_outs.dur_could_fix;
+else
+  dur = file_outs.dur_did_fix;
+end
+
+plt_vec = dur;
+mask = file_outs.block_type == "A" | file_outs.block_type == "C";
+
+[I, id, C] = rowsets( 4, file_outs ...
+  , {'block_type'}, {}, {'category'}, {} ...
+  , 'mask', mask, 'to_string', true );
+C = strrep( C, '_', ' ');
+
+figure(2); clf;
+[axs, hs, xs] = plots.simplest_barsets( plt_vec, I, id, C ...
+  , 'summary_func', @nanmean ...
+  , 'error_func', @plotlabeled.nansem ...
+  , 'add_points', false ...
+);
+
+set( axs, 'xticklabelrotation', 10 );
+shared_utils.plot.match_ylims( axs );
+
+if ( is_prop )
+  ylabel( axs(1), 'delta (proportion of fixation)' );
+else
+  ylabel( axs(1), 'delta (fixation duration)' );
+end
+
 
 %%  duration of each category, affil vs aggressive
 

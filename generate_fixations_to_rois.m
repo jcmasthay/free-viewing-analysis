@@ -13,9 +13,10 @@ samp_files = shared_utils.io.findmat( ...
 
 category_names = [ "animal", "human", "vehicle" ];
 
+vid_infos = shared_utils.io.fload( fullfile(fv_data_directory, 'videos/vid_info.mat') );
+
 %%
 
-per_file_outs = cell( numel(samp_files), 1 );
 allow_overwrite = false;
 
 %%
@@ -57,15 +58,16 @@ category_types = { '1', '2', '3' };
 try  
   
 detects_tbl = process_clip_table( ...
-    edf_infos, vid_names, vid_p, bbox_p, screen_dims, conf_threshold ...
+    edf_infos, vid_infos, vid_names, vid_p, bbox_p, screen_dims, conf_threshold ...
   , category_types ...
 );
 
+fprintf( '\n Saving %s ...', dst_p );
 do_save( dst_p, detects_tbl );
 
 catch err
   fprintf( '\n\n\n ||| %d failed', si );
-%   throw( err );
+  rethrow( err );
 end
 
 % per_file_outs{si} = tot_tbl;
@@ -79,7 +81,7 @@ save( p, 'tbl' );
 end
 
 function detect_tbl = process_clip_table(...
-  edf_infos, vid_names, vid_p, bbox_p, screen_dims, conf_threshold, category_types)
+  edf_infos, vid_infos, vid_names, vid_p, bbox_p, screen_dims, conf_threshold, category_types)
 
 detect_tbl = table();
 
@@ -89,8 +91,12 @@ for i = 1:numel(edf_infos)
   fprintf( '\n\t %d of %d', i, numel(edf_infos) );
   
   bboxes = load( fullfile(bbox_p, sprintf('%s-bbox', vid_names(i)), 'all_bboxes.mat') );
-  vid_reader = VideoReader( fullfile(vid_p, vid_names(i)) );
-  im_dims = [ vid_reader.Width, vid_reader.Height ];
+%   vid_reader = VideoReader( fullfile(vid_p, vid_names(i)) );
+  [~, loc] = ismember( vid_names(i), vid_infos.name );
+  assert( loc > 0, 'No such video: "%s".', vid_names(i) );
+  im_dims = vid_infos.size(loc, :);
+  
+%   im_dims = [ vid_reader.Width, vid_reader.Height ];
   
   %%
   
@@ -112,7 +118,7 @@ for i = 1:numel(edf_infos)
     edf_px = fix.position(1);
     edf_py = fix.position(2);
     
-    un_frames = unique( fix.video_frame(~isnan(fix.video_frame)) );
+    un_frames = unique( fix.video_frame(~isnan(fix.video_frame) & fix.video_frame > 0) );
     detects = bboxes.detections(un_frames);
     empties = cellfun(@(x) isequal(x, struct), detects);
     
