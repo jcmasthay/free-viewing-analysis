@@ -50,16 +50,21 @@ end
 
 %%
 
+file_outs = vertcat( per_file_outs{:} );
+% ib_detects = file_outs.ib_detects;
+% could_fix = file_outs.could_fix;
+% did_fix = file_outs.did_fix;
+
+%%
+
 vid_infos = readtable( '~/Downloads/all_data.xlsx' );
 vid_infos.code = string( deblank(vid_infos.code) );
 vid_infos.prolific_pid = string( deblank(vid_infos.prolific_pid) );
 
 %%
 
-file_outs = vertcat( per_file_outs{:} );
-% ib_detects = file_outs.ib_detects;
-% could_fix = file_outs.could_fix;
-% did_fix = file_outs.did_fix;
+[I, ratings_tbl] = findeach( vid_infos, {'code'} );
+ratings_tbl.rating = cellfun( @(x) nanmean(vid_infos.affil_aggr_slider_value(x)), I );
 
 %%  duration of each category
 
@@ -95,6 +100,55 @@ else
   ylabel( axs(1), 'delta (fixation duration)' );
 end
 
+%%  duration of each category vs. affil-aggr rating
+
+is_prop = true;
+
+if ( is_prop )
+  dur = file_outs.dur_did_fix ./ file_outs.dur_could_fix;
+else
+  dur = file_outs.dur_did_fix;
+end
+
+plt_vec = dur;
+mask = file_outs.block_type == "A" | file_outs.block_type == "C";
+
+[I, mu_tbl] = findeach( file_outs, {'identifier', 'block_type', 'category'}, mask );
+mu_tbl.summary = cellfun( @(x) nanmean(plt_vec(x)), I );
+[~, loc] = ismember( mu_tbl.identifier, ratings_tbl.code );
+mu_tbl.ratings(:) = nan;
+mu_tbl.ratings(loc ~= 0) = ratings_tbl.rating(loc(loc ~= 0));
+
+mask = ~isnan( mu_tbl.ratings ) & ~isnan( mu_tbl.summary );
+[I, id, C] = rowsets( 2, mu_tbl, {'block_type'}, 'category' ...
+  , 'to_string', 1, 'mask', mask );
+[PI, PL] = plots.nest2( id, I, C );
+figure(1); clf;
+axs = plots.panels( numel(PI) );
+for i = 1:numel(axs)
+  axes(axs(i));
+  [g, v] = ungroupi( PI{i} );
+  gscatter( mu_tbl.ratings(v), mu_tbl.summary(v), mu_tbl.category(v) );
+  colors = hsv( numel(PI{i}) );
+  xlim( axs(i), [-1, 1] );
+  for j = 1:numel(PI{i})
+    sx = mu_tbl.ratings(PI{i}{j});
+    sy = mu_tbl.summary(PI{i}{j});
+    ps = polyfit( sx, sy, 1 );
+    xs = get( axs(i), 'xlim' );
+    hold( axs(i), 'on' );
+    h = line( axs(i), xs, polyval(ps, xs) );
+    set( h, 'color', colors(j, :) );
+    [r, p] = corr( sx, sy );
+    txt = sprintf( 'R = %0.3f, P = %0.3f', r, p );
+    h = text( axs(i), 0.6, 1 - 0.1 * j, txt );
+    set( h, 'color', colors(j, :) );
+  end
+  title( axs(i), PL{i, 1} );
+  xlabel( axs(i), 'affil vs aggressive rating' );
+  ylabel( axs(i), 'proportion of time in social roi' );
+  shared_utils.plot.match_ylims( axs(i) );
+end
 
 %%  duration of each category, affil vs aggressive
 
