@@ -1,8 +1,13 @@
 load( '~/Downloads/data.mat' );
+
 %%
 
-samps_p = '/Volumes/external3/data/changlab/jamie/free-viewing/edf_samples';
-bbox_p = '/Volumes/external3/data/changlab/jamie/free-viewing/detections';
+load( '/Volumes/external3/data/changlab/jamie/free-viewing/data/all_traces.mat' );
+
+%%
+
+samps_p = fullfile( fv_data_directory, 'edf_samples' );
+bbox_p = fullfile( fv_data_directory, 'detections' );
 samps_files = shared_utils.io.findmat( samps_p );
 
 %%
@@ -46,15 +51,15 @@ of_interest = intersect(of_interest, lum_table.code);
 % of_interest = {'Odd_Bird_Seduction_Techniques'};
 
 sel = find( ismember( C.Code, of_interest ) );
-sel
 
 keep_vars = { 'identifier', 'block_type', 'Code', 'timestamp' };
 
 all_traces = table();
 for i = 1:numel(sel)
+  fprintf( '\n %d of %d', i, numel(sel) );
   traces = compute_traces( samps(I{sel(i)}, :), vid_infos, keep_vars );
   rest_vars = setdiff( traces.Properties.VariableNames, keep_vars );
-  rest_traces = cellfun( @(x) {traces.(x)(:)'}, rest_vars );
+  rest_traces = cellfun( @(x) {traces.(x)'}, rest_vars );
   kept_vars = unique( traces(:, keep_vars) );
   assert( rows(kept_vars) == 1 );
   for j = 1:numel(rest_vars)
@@ -64,24 +69,6 @@ for i = 1:numel(sel)
 end
 
 all_traces = sort_traces(all_traces);
-
-%%
-
-codes = unique( all_traces(:, 'Code') );
-for i = 1:size(codes, 1)
-  bbox_mat = shared_utils.io.fload(...
-    fullfile(bbox_p, sprintf('%s.avi-bbox', codes.Code{i}), 'all_bboxes.mat') );
-  
-  for j = 1:numel(bbox_mat)
-    frame_bboxes = bbox_mat{j};
-    for k = 1:numel(frame_bboxes)
-      normalized_bbox = frame_bboxes{k}.bbox;
-      scaled_bbox = normalized_bbox .* 
-      
-      error( 'xx' );
-    end
-  end
-end
 
 %%  time in vs. out of social roi
 
@@ -272,6 +259,7 @@ for i = 1:numel(resamp_I)
     aligned_traces = nan( numel(ri), numel(time_axis) );
     aligned_lums = nan( numel(ri), numel(time_axis) );
     aligned_ratings = nan( numel(ri), numel(time_axis) );
+    aligned_pos = nan( numel(ri), numel(time_axis), 2 );
 
     clip_name = all_traces.Code{ri(1)};
     if contains(clip_name, 'Mcq')
@@ -294,6 +282,7 @@ for i = 1:numel(resamp_I)
         pupil_size = all_traces.cleaned_pup{ri(j)};
         % pupil_size = all_traces.smoothed_pup{ri(j)};
         ratings = all_traces.affil_aggr_ratings{ri(j)};
+        pos = all_traces.position{ri(j)};
 
         lum = lum_table.luminance{string(lum_table.code) == all_traces.Code(ri(j))};
         lum_t = (0:numel(lum)-1)/fps;
@@ -304,6 +293,7 @@ for i = 1:numel(resamp_I)
             [~, ind] = min( abs(rounded_video_t(k) - time_axis) );
             aligned_traces(j, ind) = pupil_size(k); 
             aligned_ratings(j, ind) = ratings(k);
+            aligned_pos(j, ind, :) = pos(:, k);
         end
         
         if j > 1
@@ -318,6 +308,9 @@ for i = 1:numel(resamp_I)
         aligned_traces(j, :) = fillmissing( aligned_traces(j, :), 'linear' );
         aligned_lums(j, :) = fillmissing( aligned_lums(j, :), 'linear' );
         aligned_ratings(j, :) = fillmissing( aligned_ratings(j, :), 'linear' );
+        for k = 1:size(aligned_pos, 3)
+          aligned_pos(j, :, k) = fillmissing( aligned_pos(j, :, k), 'linear' );
+        end
     end
 
     smoothed_lums = smoothdata( aligned_lums, 2, 'gaussian', 5e3 );
@@ -328,13 +321,392 @@ for i = 1:numel(resamp_I)
         all_traces.aligned_trace( ri(p) ) = {smoothed_traces( p, : )};
         all_traces.aligned_rating( ri(p) ) = {aligned_ratings( p, : )};
         all_traces.aligned_time( ri(p) ) = {time_axis};
+        all_traces.aligned_position( ri(p) ) = {squeeze(aligned_pos(p, :, :))};
     end
+end
+
+%%
+
+all_traces.within_screen_proportion = nan( size(all_traces, 1), 1 );
+
+for i = 1:size(all_traces, 1)
+
+position_trace0 = all_traces.aligned_position{i};
+  
+[ibx, iby] = deal(...
+    position_trace0(:, 1) >= 0 & position_trace0(:, 1) <= 1600 ...
+  , position_trace0(:, 2) >= 0 & position_trace0(:, 2) <= 900 ...
+);
+
+ib = ibx & iby;
+
+all_traces.within_screen_proportion(i) = pnz( ib );
+
+end
+
+m = ~strcmp( all_traces.block_type, 'C' );
+bins = linspace( 0, 1, 20 );
+figure(1); clf; hist(all_traces.within_screen_proportion(m),bins);
+
+% median( all_traces.within_screen_proportion(m) )
+% pnz( all_traces.within_screen_proportion(m) > 0.9 )
+
+%%  remove first N ms of position data of each shot by filling them with NaNs
+
+all_traces.aligned_truncated_position = all_traces.aligned_position;
+
+remove_first_ms = 500;
+
+for i = 1:size(all_traces, 1)
+
+fprintf( '\n %d of %d', i, size(all_traces, 1) );
+
+[boundaries, shot_indices] = find_shot_boundaries( ...
+  shots, all_traces.aligned_time{i}, all_traces.Code{i} );
+
+for j = 1:size(boundaries, 1)
+  [i0, i1] = deal( boundaries(j, 1), boundaries(j, 2) );
+  i1 = min( i0 + remove_first_ms, i1 );
+  all_traces.aligned_truncated_position{i}(i0:i1, :) = nan;
+end
 
 end
 
 %%
 
-save_path = strcat('/Users/efedogruoz/Desktop/pupsize_plots/data.mat');
+
+
+%%
+
+% clip_id = "LongTailedMacaque_Human_FeedToolUsePlay";
+% clip_id = "Orangutan_Human_TrainforWild";
+clip_id = "Marmoset_Harvest_Groom";
+
+[I, C] = findeach( corr_tbls, {'identifier', 'block_type'} ...
+  , strcmp(corr_tbls.block_type, 'A') )
+C.r = cellfun( @(x) mean(corr_tbls.r(x)), I );
+sortrows( C, 'r' )
+
+twin = [15, 30];
+
+search_for = find( ...
+  all_traces.identifier == clip_id & ...
+  strcmp(all_traces.block_type, 'A') );
+
+% search_for = [ search_for_a(1), search_for_b(1) ];
+% search_for = search_for_b;
+
+figure(1); clf;
+% axs = plots.panels( numel(search_for) );
+
+axs = plots.panels( 2 );
+
+for i = 1:numel(search_for)
+  
+ind_x = 1;
+ind_y = 2;
+
+time_axis = all_traces.aligned_time{search_for(i)};
+pos_trace = all_traces.aligned_position{search_for(i)};
+
+win = 250;
+time_axis = time_axis(1:win:end);
+pos_trace = pos_trace(1:win:end, :);
+
+plot( axs(ind_x), time_axis, pos_trace(:, 1), 'DisplayName', sprintf('viewing x %d', i) );
+plot( axs(ind_y), time_axis, pos_trace(:, 2), 'DisplayName', sprintf('viewing y %d', i) );
+
+hold( axs(ind_x), 'on' );
+hold( axs(ind_y), 'on' );
+legend;
+
+title( axs(ind_x), plots.strip_underscore(compose("%s x", clip_id)) );
+title( axs(ind_y), plots.strip_underscore(compose("%s y", clip_id)) );
+
+end
+
+shared_utils.plot.match_ylims( axs );
+xlim( axs, twin );
+
+%%  compute correlations between scan paths on multiple viewings
+
+mask = all_traces.within_screen_proportion >= 0.85;
+% mask(:) = true;
+
+downsample_step = 50;
+
+% pos_var = 'aligned_position';
+pos_var = 'aligned_truncated_position';
+
+[I, C] = findeach( all_traces, {'identifier', 'block_type'}, mask );
+
+corr_tbls = table();
+for i = 1:numel(I)
+  fprintf( '\n %d of %d', i, numel(I) );
+  
+  inds = I{i};
+  pairs = bfw.pair_combination_indices( numel(inds) );
+  
+  for j = 1:size(pairs, 1)
+    [i0, i1] = deal( pairs(j, 1), pairs(j, 2) );
+    ind0 = inds(i0);
+    ind1 = inds(i1);
+    
+    position_trace0 = all_traces.(pos_var){ind0};
+    position_trace1 = all_traces.(pos_var){ind1};
+    
+    if ( 1 )
+      position_trace0 = position_trace0(1:downsample_step:end, :);
+      position_trace1 = position_trace1(1:downsample_step:end, :);
+    end
+    
+    [ibx0, iby0] = deal(...
+        position_trace0(:, 1) >= 0 & position_trace0(:, 1) <= 1600 ...
+      , position_trace0(:, 2) >= 0 & position_trace0(:, 2) <= 900 ...
+    );
+  
+    [ibx1, iby1] = deal(...
+        position_trace1(:, 1) >= 0 & position_trace1(:, 1) <= 1600 ...
+      , position_trace1(:, 2) >= 0 & position_trace1(:, 2) <= 900 ...
+    );
+  
+    keep_pos = ibx0 & iby0 & ibx1 & iby1;
+    
+    [trace0_x, trace0_y] = deal(...
+        zscore(position_trace0(keep_pos, 1)) ...
+      , zscore(position_trace0(keep_pos, 2)) ...
+    );
+  
+    position_trace0 = [ trace0_x; trace0_y ];
+  
+    [trace1_x, trace1_y] = deal(...
+        zscore(position_trace1(keep_pos, 1)) ...
+      , zscore(position_trace1(keep_pos, 2)) ...
+    );
+  
+    position_trace1 = [ trace1_x; trace1_y ];
+    
+    time_trace0 = all_traces.aligned_time{ind0}(1:downsample_step:end);
+    time_trace1 = all_traces.aligned_time{ind1}(1:downsample_step:end);
+    
+    time_trace0 = time_trace0(keep_pos);
+    time_trace1 = time_trace1(keep_pos);
+    
+    [r, p] = corr( position_trace0, position_trace1, 'rows', 'complete' );
+    corr_tbl = [ C(i, :), table(r, p, i0, i1, 'VariableNames', {'r', 'p', 'i0', 'i1'}) ];
+    corr_tbls = [ corr_tbls; corr_tbl ];
+    
+    if ( 0 )
+      figure(1); clf;
+      ax = subplot( 2, 1, 1 );
+      hold( ax, 'on' );
+      plot( time_trace0, position_trace0(1:numel(time_trace0/2)) );
+      plot( time_trace1, position_trace1(1:numel(time_trace1/2)) );
+      ax = subplot( 2, 1, 2 );
+      hold( ax, 'on' );
+      plot( time_trace0, position_trace0(numel(time_trace0/2)+1:end) );
+      plot( time_trace1, position_trace1(numel(time_trace1/2)+1:end) );
+
+      title( ax, plots.strip_underscore(sprintf('%s_%s', C.identifier{i}, C.block_type{i})) );
+      save_p = fullfile( fv_data_directory, 'plots/traces/scanpath_pairs' );
+      shared_utils.io.require_dir( save_p );
+      saveas( gcf, fullfile(save_p ...
+        , sprintf('%s_%s_%d_%d.fig', C.identifier{i}, C.block_type{i}, i0, i1)) );
+    end
+  end
+end
+
+%%
+
+[I, C] = findeach( corr_tbls, 'identifier' );
+
+C.ps = nan( numel(I), 1 );
+for i = 1:numel(I)
+  ind_a = intersect( I{i}, find(strcmp(corr_tbls.block_type, 'A')) );
+  ind_b = intersect( I{i}, find(strcmp(corr_tbls.block_type, 'B')) );
+  
+  if ( isempty(ind_a) || isempty(ind_b) )
+    continue
+  end
+  
+  C.ps(i) = ranksum( corr_tbls.r(ind_a), corr_tbls.r(ind_b) );
+end
+
+C(C.ps < 0.05, :)
+
+%%  compare scan path correlation coefficients between block types
+
+[I, C] = findeach( corr_tbls, {'identifier', 'i0', 'i1'} );
+a_ind = find( strcmp(corr_tbls.block_type, 'A') );
+b_ind = find( strcmp(corr_tbls.block_type, 'B') );
+c_ind = find( strcmp(corr_tbls.block_type, 'C') );
+
+coeff_pairs = table();
+for i = 1:numel(I)
+  ind = I{i};
+  curr_a_ind = intersect( a_ind, ind );
+  curr_b_ind = intersect( b_ind, ind );
+  curr_c_ind = intersect( c_ind, ind );
+  
+  if ( isempty(curr_a_ind) ), ra = nan; else; ra = corr_tbls.r(curr_a_ind); end
+  if ( isempty(curr_b_ind) ), rb = nan; else; rb = corr_tbls.r(curr_b_ind); end
+  if ( isempty(curr_c_ind) ), rc = nan; else; rc = corr_tbls.r(curr_c_ind); end
+  
+  pair_a_b = table( ra, rb, {'A'}, {'B'} ...
+    , 'va', {'set1', 'set2', 'block_type1', 'block_type2'} );
+  pair_a_c = table( ra, rc, {'A'}, {'C'} ...
+    , 'va', {'set1', 'set2', 'block_type1', 'block_type2'} );
+  pair_b_c = table( rb, rc, {'B'}, {'C'} ...
+    , 'va', {'set1', 'set2', 'block_type1', 'block_type2'} );
+  
+  pair_a_b = [ pair_a_b, C(i, :) ];
+  pair_a_c = [ pair_a_c, C(i, :) ];
+  pair_b_c = [ pair_b_c, C(i, :) ];
+  
+  coeff_pairs = [ coeff_pairs; pair_a_b; pair_a_c; pair_b_c ];
+end
+
+[I, coeff_pair_means] = findeach( ...
+  coeff_pairs, {'block_type1', 'block_type2', 'identifier'} );
+[coeff_pair_means.set1, coeff_pair_means.set2] = cellfun(...
+  @(x) deal(nanmean(coeff_pairs.set1(x)), nanmean(coeff_pairs.set2(x))), I);
+
+[I, coeff_pair_stats] = findeach( coeff_pair_means, {'block_type1', 'block_type2'} );
+
+coeff_pair_stats.ps = nan( numel(I), 1 );
+coeff_pair_stats.stats = cell( numel(I), 1 );
+for i = 1:numel(I)
+  try
+    ind = I{i};
+%     [coeff_pair_stats.ps(i), ~, coeff_pair_stats.stats{i}]
+    [~, coeff_pair_stats.ps(i)] = ttest( ...
+      coeff_pair_means.set1(ind), coeff_pair_means.set2(ind) );
+  end
+end
+
+[I, clip_idents] = findeach( coeff_pairs, {'identifier'} ...
+  , strcmp(coeff_pairs.block_type1, 'A') & ...
+    strcmp(coeff_pairs.block_type2, 'B') );
+clip_idents.r1 = cellfun( @(x) mean(coeff_pairs.set1(x)), I );
+clip_idents.r2 = cellfun( @(x) mean(coeff_pairs.set2(x)), I );
+sortrows( clip_idents, 'r1', 'descend' )
+
+%%  compute all pair-wise correlations between scan paths on different viewings
+
+% pos_var = 'aligned_position';
+pos_var = 'aligned_truncated_position';
+
+[I, C] = findeach( all_traces, {'block_type'} );
+clip_lens = cellfun( @numel, all_traces.aligned_time );
+min_len = min( clip_lens );
+
+trace_corrs = table();
+for i = 1:numel(I)
+  fprintf( '\n %d of %d', i, numel(I) );
+  ind = I{i};
+  mat_r = nan( numel(ind) );
+  [~, ord] = sort( all_traces.identifier(ind) );
+  ind = ind(ord);
+  for j = 1:numel(ind)
+    fprintf( '\n\t %d of %d', j, numel(ind) );
+    for k = 1:numel(ind)
+      ind0 = ind(j);
+      ind1 = ind(k);
+      position_trace0 = all_traces.(pos_var){ind0};
+      position_trace1 = all_traces.(pos_var){ind1};
+      position_trace0 = columnize( position_trace0(1:min_len, :) );
+      position_trace1 = columnize( position_trace1(1:min_len, :) );
+      
+      [r, p] = corr( position_trace0, position_trace1 );
+      mat_r(j, k) = r;      
+%       trace_corrs(end+1, :) = [ C(i, :), table(r, p, j, k, 'va', {'r', 'p', 'j', 'k'}) ];
+    end
+  end
+  
+  idents = all_traces.identifier(ind);
+  trace_corrs(end+1, :) = [ C(i, :), table({mat_r}, {idents}, 'va', {'r', 'identifiers'}) ];
+end
+
+%%
+
+[I, C] = findeach( trace_corrs, {'block_type'} );
+figure(1); clf;
+axs = plots.panels( numel(I) );
+for i = 1:numel(I)
+  idents = trace_corrs.identifiers{I{i}};
+  ind = ismember(...
+      idents ...
+    , correspondence_tbl.bot_clips{...
+    strcmp(correspondence_tbl.block_type, C.block_type{i})});
+  
+  imagesc( axs(i), trace_corrs.r{I{i}}(ind, ind) );  
+  [~, ~, ic] = unique( trace_corrs.identifiers{I{i}}(ind) );
+  diffs = find( diff(ic) > 0 );
+  
+  title( axs(i), C.block_type{i} );
+  colorbar( axs(i) );
+  shared_utils.plot.set_clims( axs(i), [-0.2, 0.3] );
+  hold( axs(i), 'on' );
+%   for j = 1:numel(diffs)
+%     text( axs(i), 0, diffs(j), trace_corrs.identifiers{I{i}}(diffs(j)) );
+%   end
+end
+
+%%
+
+target_pair = find( ...
+  all_traces.identifier == "Mcq_Mongoose_Play" & ...
+  strcmp(all_traces.block_type, 'A') );
+
+tp = target_pair(1:2);
+
+figure(1); clf; hold on;
+plot( all_traces.aligned_time{tp(1)}, all_traces.aligned_position{tp(1)}(:, 1) );
+plot( all_traces.aligned_time{tp(2)}, all_traces.aligned_position{tp(2)}(:, 1) );
+
+%%  average correlations over pairs of viewings of individual clips
+
+[I, mu_corr_tbls] = findeach( corr_tbls, {'identifier', 'block_type'} );
+mu_corr_tbls.r = cellfun( @(x) mean(corr_tbls.r(x)), I );
+
+%%  examine clips with highest correspondence (r value)
+
+[I, C] = findeach( corr_tbls, {'block_type', 'identifier'} );
+C.r = cellfun( @(x) nanmean(corr_tbls.r(x)), I );
+
+[I, correspondence_tbl] = findeach( C, 'block_type' );
+correspondence_tbl.top_clips(:) = { [] };
+
+for i = 1:numel(I)
+  ind = I{i};
+  rs = C.r(ind);
+  quants = prctile( rs, [10, 90, 100] );
+  top_ind = ind(rs >= quants(2));
+  bot_ind = ind(rs < quants(1));
+  top_clips = C.identifier(top_ind);
+  bot_clips = C.identifier(bot_ind);
+  correspondence_tbl.top_clips{i} = [top_clips, C.r(top_ind) ];
+  correspondence_tbl.bot_clips{i} = [bot_clips, C.r(bot_ind) ];
+end
+
+%%
+
+[I, C] = findeach( mu_corr_tbls, {'block_type'} );
+figure(1); clf;
+axs = plots.panels( numel(I) );
+for i = 1:numel(I)
+  bins = linspace( -1, 1, 50 );
+  hist( axs(i), mu_corr_tbls.r(I{i}), bins );
+  xlim( axs(i), [-1, 1] );
+  title( axs(i), C.block_type{i} );
+  med = median( mu_corr_tbls.r(I{i}) );
+  hold( axs(i), 'on' );
+  shared_utils.plot.add_vertical_lines( axs(i), med );
+end
+
+%%
+
+save_path = '~/Downloads/traces_data.mat';
 save(save_path, 'all_traces', '-v7.3');
 
 %%
@@ -902,6 +1274,7 @@ end
 function t = compute_traces(samps, vid_infos, keep_vars)
 
 pupil_size = [];
+position = [];
 video_t = [];
 affil_aggr_ratings = [];
 affil_aggr_ratings_err = [];
@@ -915,6 +1288,7 @@ for i = 1:size(samps, 1)
   
   pupil_size = [ pupil_size; edf_info.pupil_size(1:num_samps) ];
   video_t = [ video_t; edf_info.video_time(1:num_samps) ];
+  position = [ position; edf_info.position(1:num_samps, :) ];
 
   if ( 1 )
     match_start = ...
@@ -951,6 +1325,7 @@ t = table();
 t.cleaned_pup = cleaned_pup;
 t.smoothed_pup = smoothed_pup;
 t.pupil_size = pupil_size;
+t.position = position;
 t.video_t = video_t;
 t.affil_aggr_ratings = affil_aggr_ratings;
 t.affil_aggr_ratings_err = affil_aggr_ratings_err;
@@ -960,7 +1335,7 @@ end
 
 function traces = sort_traces(traces)
 
-cols_to_sort = {'affil_aggr_ratings', 'affil_aggr_ratings_err', 'cleaned_pup', 'pupil_size', 'smoothed_pup', 'video_t'};
+cols_to_sort = {'position', 'affil_aggr_ratings', 'affil_aggr_ratings_err', 'cleaned_pup', 'pupil_size', 'smoothed_pup', 'video_t'};
 
 for i = 1:height(traces)
     time_col = traces(i, 'video_t');
@@ -971,11 +1346,35 @@ for i = 1:height(traces)
         col_name = cell2mat(cols_to_sort(p));
         col = traces(i, col_name);
         col_mat = cell2mat(table2array(col));
-        col_sorted = col_mat(sorted_indices);
+        if ( isvector(col_mat) )
+          col_sorted = col_mat(sorted_indices);
+        else
+          col_sorted = col_mat(:, sorted_indices);
+        end
         traces(i, col_name) = array2table({col_sorted});
     end
 
     % traces.smoothed_pup{i} = traces.smoothed_pup{i} - traces.smoothed_pup{i}(1);
 
 end
+end
+
+function [boundaries, match_shot] = find_shot_boundaries(shots, time, code)
+
+match_shot = find( ismember(shots.identifier, code) );
+
+get_t = @(t) min( abs(time - t) );
+
+boundaries = nan( numel(match_shot), 2 );
+for i = 1:numel(match_shot)
+  % for each shot ...
+  t0 = shots.start(match_shot(i));
+  t1 = shots.stop(match_shot(i));
+
+  [~, ind0] = get_t( t0 );
+  [~, ind1] = get_t( t1 );
+
+  boundaries(i, :) = [ind0, ind1];
+end
+
 end

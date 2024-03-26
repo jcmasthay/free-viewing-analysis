@@ -25,6 +25,10 @@ save_data = true;
 
 %%
 
+vid_info = shared_utils.io.fload( fullfile(fv_data_directory, 'videos/vid_info.mat') );
+
+%%
+
 parfor i = 1:numel(task_file_ps)
 %%
 
@@ -61,7 +65,7 @@ clip_table.timestamp(:) = task_file.time0_timestamp;
 %%
 
 try
-  edf_info = compute_edf_sample_traces( edf_file, sync_info, clip_table, vid_p );
+  edf_info = compute_edf_sample_traces( edf_file, sync_info, clip_table, vid_info );
   clip_table.edf_info = edf_info;
   if ( save_data )
     do_save( save_p, clip_table );
@@ -70,6 +74,7 @@ try
   end
 catch err
   warning( err.message );
+%   rethrow( err );
 end
 
 end
@@ -82,7 +87,7 @@ save( preproc_p, 'clip_table' );
 
 end
 
-function edf_infos = compute_edf_sample_traces(edf_file, sync_info, clip_table, vid_p)
+function edf_infos = compute_edf_sample_traces(edf_file, sync_info, clip_table, vid_info)
 
 edf_infos = cell( height(clip_table), 1 );
 
@@ -92,20 +97,25 @@ for i = 1:height(clip_table)
   fprintf( '\n\t %d of %d', i, height(clip_table) );
   
   vid_name = clip_table.video_filename{i};
-  vid_reader = VideoReader( fullfile(vid_p, vid_name) );
-  vid_fps = vid_reader.FrameRate;
+  vid_ind = strcmp( vid_info.name, vid_name );
+  vid_fps = vid_info.fps(vid_ind);
   
   [~, ci] = min( abs(sync_info.video_time - clip_table.start(i)) );
   clip_index = sync_info{ci, 'clip_index'};
   try
     assert( numel(clip_index) == 1 && clip_index == i, 'non matching clip' );
   catch err
-    rethrow( err );
+    warning( err.message );
   end
+  clip_index = i;
   match_clip = sync_info(sync_info.clip_index == clip_index, :);
   
+%   if ( isempty(match_clip) )
+%     match_clip = table( nan, nan, 'va', {'video_time', 'edf_time'} );
+%   end
+  
   [~, start_ind] = min( match_clip.video_time );
-  [~, stop_ind] = max( match_clip.video_time );  
+  [~, stop_ind] = max( match_clip.video_time );
   edf_start_t = match_clip.edf_time(start_ind);
   edf_stop_t = match_clip.edf_time(stop_ind);
   

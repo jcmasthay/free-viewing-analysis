@@ -16,6 +16,8 @@ good_node_names = { ...
 nan_inds = any( isnan(tracks), 3 );
 p_missing = sum( nan_inds, 1 ) / size( nan_inds, 1 );
 miss_frac = compose( "%s: %0.3f%%\n", string(node_names), 100*p_missing(:) );
+[~, ord] = sort( p_missing );
+miss_frac = miss_frac(ord);
 fprintf( "Missing: %s", miss_frac );
 
 tracks = tracks(:, lb, :);
@@ -40,7 +42,10 @@ umap_colors = umap_colors(non_nan, :);
 nan_inds = find( any(isnan(poses), 2) );
 non_nan = find( ~any(isnan(poses), 2) );
 
-fprintf( 'Kept %0.3f%% of frames\n', numel(non_nan) / size(poses, 1) * 100 );
+fprintf( 'Kept %0.3f%% (%d of %d) of frames\n' ...
+  , numel(non_nan) / size(poses, 1) * 100, numel(non_nan), size(poses, 1) );
+
+%%
 
 tsne_res = tsne( poses(non_nan, :) );
 
@@ -51,9 +56,48 @@ tsne_colors = base_colors(non_nan, :);
 
 gmm_model = fitgmdist( tsne_res, 11, 'Replicates', 25 );
 
+%%  estimate best K for k means clustering using silhouette score
+
+num_iters = 100;
+
+ks = 2:11;
+ss = nan( num_iters, numel(ks) );
+
+parfor it = 1:num_iters
+  
+fprintf( '\n %d of %d', it, num_iters );
+
+s = nan( numel(ks), 1 );
+
+ind = 1;
+for k = ks
+  idx = kmeans( tsne_res, k );
+  s(ind) = mean( silhouette(tsne_res, idx) );
+  ind = ind + 1;
+end
+
+ss(it, :) = s;
+
+end
+
+%%  plot silhouette scores
+
+figure(1); clf;
+
+[~, best_ks] = max( ss, [], 2 );
+best_ks = ks(best_ks);
+hist( best_ks, ks );
+title( 'Proportion of iterations with highest silhouette score' );
+xlabel( 'K' );
+ylabel( 'Num iterations' );
+
+cs = histcounts( best_ks, [ks, max(ks)+1] );
+[~, ind] = max( cs );
+best_k = ks(ind);
+
 %%
 
-[pred_label, cent] = kmeans( tsne_res, 11 );
+[pred_label, cent] = kmeans( tsne_res, best_k );
 % [pred_label, cent] = kmeans( poses(non_nan, :), 11 );
 colors = jet( numel(unique(pred_label)) );
 cluster_colors = colors(pred_label, :);
@@ -86,11 +130,32 @@ lim1 = max(max(get(gca, 'ylim')), max(get(gca, 'xlim')));
 xlim( [lim0, lim1] );
 ylim( [lim0, lim1] );
 
-if ( 1 )
+if ( 0 )
   hold on;
   voronoi( cent(:, 1), cent(:, 2) );
   text( cent(:, 1), cent(:, 2), compose("cluster %d", unique(pred_label)) );
 end
+
+%%  overlay points on frame for desired cluster
+
+vr = VideoReader( '/Users/Nick/Downloads/shorter_test_label_left_front.mp4.avi' );
+
+desired_cluster = 3;
+cluster_ind = non_nan(pred_label == desired_cluster);
+
+sel_frame = randsample( numel(cluster_ind), 1 );
+
+sel_poses = poses(cluster_ind, :);
+sel_poses = reshape( sel_poses, size(sel_poses, 1), numel(good_node_names), [] );
+sel_poses = sel_poses + mu(non_nan(cluster_ind), :, :);
+
+figure(1); clf;
+imshow( read(vr, cluster_ind(sel_frame)) );
+
+hold on;
+gscatter( sel_poses(sel_frame, :, 1)', sel_poses(sel_frame, :, 2)', good_node_names(:) );
+
+title( compose("Frame %d from cluster %d", sel_frame, desired_cluster) );
 
 %%
 
@@ -108,25 +173,6 @@ figure(1); clf;
 x_inds = non_nan(find(pred_label == 1));
 bar( x_inds, ones(1, numel(x_inds)) );
 xlim( [0, numel(pred_label) ] );
-
-%%
-
-vr = VideoReader( '/Users/Nick/Downloads/shorter_test_label_left_front.mp4.avi' );
-
-desired_cluster = 8;
-cluster_ind = non_nan(pred_label == desired_cluster);
-
-sel_frame = randsample( numel(cluster_ind), 1 );
-
-sel_poses = poses(cluster_ind, :);
-sel_poses = reshape( sel_poses, size(sel_poses, 1), numel(good_node_names), [] );
-sel_poses = sel_poses + mu(non_nan(cluster_ind), :, :);
-
-figure(1); clf;
-imshow( read(vr, cluster_ind(sel_frame)) );
-
-hold on;
-gscatter( sel_poses(sel_frame, :, 1)', sel_poses(sel_frame, :, 2)', good_node_names(:) );
 
 %%
 

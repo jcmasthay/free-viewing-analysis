@@ -78,6 +78,7 @@ end
 
 plt_vec = dur;
 mask = file_outs.block_type == "A" | file_outs.block_type == "C";
+mask(:) = true;
 
 [I, id, C] = rowsets( 4, file_outs ...
   , {'block_type'}, {}, {'category'}, {} ...
@@ -99,6 +100,16 @@ if ( is_prop )
 else
   ylabel( axs(1), 'delta (fixation duration)' );
 end
+
+%%  stats for duration
+
+[I, C] = findeach( file_outs, {'timestamp', 'identifier', 'block_type', 'category'} ...
+  , find(mask) ...
+);
+means = cellfun( @(x) nanmean(plt_vec(x)), I );
+
+f = fcat.from( C(:, {'block_type', 'category'}) );
+anova_outs = dsp3.anovan( means, f, {}, {'block_type', 'category'} );
 
 %%  duration of each category vs. affil-aggr rating
 
