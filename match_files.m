@@ -18,8 +18,8 @@ for i = 1:numel(varargin)
   v_ps = shared_utils.io.findmat( varargin{i} );
   v_fs = shared_utils.io.filenames( v_ps, true );
   [~, loc] = ismember( v_fs, src_fs );
-  matched(:, i+1) = loc > 0;
-  ps(:, i+1) = v_ps(loc(loc > 0));
+%   matched(:, i+1) = loc > 0;
+  ps(loc(loc > 0), i+1) = v_ps(loc > 0);
 end
 
 end

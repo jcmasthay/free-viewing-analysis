@@ -3,6 +3,7 @@ load( '~/Downloads/data.mat' );
 %%
 
 load( '/Volumes/external3/data/changlab/jamie/free-viewing/data/all_traces.mat' );
+load( '/Volumes/external3/data/changlab/jamie/free-viewing/videos/shots.mat' );
 
 %%
 
@@ -532,7 +533,8 @@ for i = 1:numel(I)
   C.ps(i) = ranksum( corr_tbls.r(ind_a), corr_tbls.r(ind_b) );
 end
 
-C(C.ps < 0.05, :)
+% C(C.ps < 0.05, :)
+C
 
 %%  compare scan path correlation coefficients between block types
 
