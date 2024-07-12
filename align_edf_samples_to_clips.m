@@ -10,7 +10,7 @@ poss_folders = shared_utils.io.filenames( poss_folders );
 sesh_dirs = poss_folders(cellfun(@(x) numel(x) == 8, poss_folders));
 
 sesh_dts = session_to_datetime( sesh_dirs );
-sesh_dirs = sesh_dirs(sesh_dts >= session_to_datetime('10012023'));
+sesh_dirs = sesh_dirs(sesh_dts >= session_to_datetime('06052024'));
 
 % sesh_dir = '08142023';
 % sesh_dirs = arrayfun( @(x) sprintf('08%d2023', x), 14:31, 'un', 0 );
@@ -29,7 +29,7 @@ vid_info = shared_utils.io.fload( fullfile(fv_data_directory, 'videos/vid_info.m
 
 %%
 
-parfor i = 1:numel(task_file_ps)
+for i = 1:numel(task_file_ps)
 %%
 
 fprintf( '\n %d of %d', i, numel(task_file_ps) );
@@ -48,11 +48,17 @@ task_file = shared_utils.io.fload( task_file_ps{i} );
 sesh_p = fileparts( task_file_ps{i} );
 edf_file = Edf2Mat( fullfile(sesh_p, task_file.edf_file_name) );
 
-sync_info = extract_edf_sync_info( ...
+%%
+
+sync_info = extract_edf_sync_info_biased_attention( ...
   edf_file.Events.Messages, task_file.edf_sync_times );
 
 if ( 1 )
-  clip_table = task_file.params.meta_data.shots;
+%   clip_table = task_file.params.meta_data.shots;
+  % @NOTE: biased attention
+  clip_table = task_file.clip_table;
+  clip_table.start(:) = 0;  
+  % @NOTE: end biased attention
 else
   dend_table = shared_utils.io.fload( fullfile(data_p, 'dendro_table.mat') );
   clip_table = append_clip_meta_data_to_clip_table( ...
@@ -73,8 +79,8 @@ try
     fprintf( '\n Would save: "%s"\n.', save_p );
   end
 catch err
-  warning( err.message );
-%   rethrow( err );
+%   warning( err.message );
+  rethrow( err );
 end
 
 end
@@ -87,7 +93,12 @@ save( preproc_p, 'clip_table' );
 
 end
 
-function edf_infos = compute_edf_sample_traces(edf_file, sync_info, clip_table, vid_info)
+function edf_infos = compute_edf_sample_traces(edf_file, sync_info, clip_table, vid_info, varargin)
+
+defaults = struct();
+defaults.use_fixed_fps = [];
+
+params = shared_utils.general.parsestruct( defaults, varargin );
 
 edf_infos = cell( height(clip_table), 1 );
 
@@ -96,17 +107,16 @@ for i = 1:height(clip_table)
   
   fprintf( '\n\t %d of %d', i, height(clip_table) );
   
-  vid_name = clip_table.video_filename{i};
-  vid_ind = strcmp( vid_info.name, vid_name );
-  vid_fps = vid_info.fps(vid_ind);
-  
-  [~, ci] = min( abs(sync_info.video_time - clip_table.start(i)) );
-  clip_index = sync_info{ci, 'clip_index'};
-  try
-    assert( numel(clip_index) == 1 && clip_index == i, 'non matching clip' );
-  catch err
-    warning( err.message );
+  if ( ~isempty(params.use_fixed_fps) )
+    vid_fps = params.use_fixed_fps;
+  else
+%     vid_name = clip_table.video_filename{i};
+    vid_name = clip_table.vid_name{i, 1}; % biased attention
+    vid_ind = strcmp( vid_info.name, vid_name );
+    assert( nnz(vid_ind) == 1 );
+    vid_fps = vid_info.fps(vid_ind);
   end
+  
   clip_index = i;
   match_clip = sync_info(sync_info.clip_index == clip_index, :);
   
