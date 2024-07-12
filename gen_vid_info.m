@@ -1,0 +1,13 @@
+vids = shared_utils.io.find( ...
+  '/Users/Nick/Downloads/jamie_fv/videos/biased_attention_clips', '.avi' );
+
+vid_info = table();
+
+for i = 1:numel(vids)
+  fprintf( '\n %d of %d', i, numel(vids) );
+  vr = VideoReader( vids{i} );
+  vid_info = [vid_info; table(...
+    string(shared_utils.io.filenames(vids{i}, true)), vr.FrameRate, [vr.Width, vr.Height] ...
+      , 'va', {'name', 'fps', 'size'}) ...
+  ];
+end
