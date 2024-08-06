@@ -1,9 +1,14 @@
 vr = VideoReader( '/Users/Nick/Downloads/shorter_test_label_left_front.mp4.avi' );
+%Change paths before running
 num_frames = max( 1, floor(vr.Duration * vr.FrameRate) );
 t = (0:num_frames-1) / vr.FrameRate;
 
 rand_data = smoothdata( rand(num_frames, 1), 'gaussian', vr.FrameRate * 2 );
 plot( t, rand_data );
+
+
+%Pull periods of high speed and look in video where those periods occur to
+%validate intuition
 
 %%
 
